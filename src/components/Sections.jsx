@@ -1,7 +1,5 @@
 // Sections.jsx — About, Galería, Ubicación, Reservas, Footer
-import { useState, useEffect, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useState } from 'react';
 import { VENUE } from '../data/data.js';
 import { Reveal, SectionTitle } from './ui.jsx';
 
@@ -56,37 +54,16 @@ export function Gallery() {
 }
 
 function MapEmbed() {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-
-  useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
-    const { lat, lng, zoom } = VENUE.coords;
-    const map = L.map(mapRef.current, {
-      center: [lat, lng], zoom,
-      zoomControl: false, attributionControl: true,
-      scrollWheelZoom: false, dragging: true, doubleClickZoom: true,
-    });
-    mapInstanceRef.current = map;
-
-    // CartoDB Dark Matter: tiles oscuros sin API key. El tinte dorado se
-    // aplica vía CSS filter en .leaflet-tile-pane (ver styles.css).
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd', maxZoom: 19,
-    }).addTo(map);
-
-    const pinIcon = L.divIcon({
-      className: 'map-pin-icon',
-      html: '<svg viewBox="0 0 24 24" width="34" height="34"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7Z" fill="var(--gold)" stroke="var(--gold-deep)" stroke-width="1"/><circle cx="12" cy="9" r="2.6" fill="var(--bg)"/></svg>',
-      iconSize: [34, 34], iconAnchor: [17, 32],
-    });
-    L.marker([lat, lng], { icon: pinIcon }).addTo(map);
-
-    return () => { map.remove(); mapInstanceRef.current = null; };
-  }, []);
-
-  return <div ref={mapRef} className="leaflet-container-gold" />;
+  return (
+    <iframe
+      className="map-iframe"
+      src={VENUE.mapsEmbedUrl}
+      title="Ubicación de Botánica RestoBar en Google Maps"
+      loading="lazy"
+      referrerPolicy="no-referrer-when-downgrade"
+      allowFullScreen
+    />
+  );
 }
 
 export function Location() {

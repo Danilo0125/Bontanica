@@ -286,17 +286,10 @@ small{font-size:.62em;font-weight:500;letter-spacing:.02em;}
 
 /* ===== Location ===== */
 .map-card{background:var(--panel);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;}
-.leaflet-container-gold{height:240px;width:100%;background:#0c1008;}
-/* Tinte dorado/sepia sobre los tiles oscuros de OpenStreetMap. Sólo afecta a
-   los tiles — el marcador y los controles quedan intactos. */
-.leaflet-container-gold .leaflet-tile-pane{
-  filter:sepia(.45) hue-rotate(-15deg) saturate(1.4) brightness(.95) contrast(1.05);
-}
-.leaflet-container-gold .leaflet-control-attribution{
-  background:rgba(8,11,6,.7);color:var(--muted);font-size:9.5px;}
-.leaflet-container-gold .leaflet-control-attribution a{color:var(--gold);}
-.map-pin-icon{background:transparent;border:0;
-  filter:drop-shadow(0 4px 10px rgba(0,0,0,.6));}
+.map-iframe{display:block;width:100%;height:280px;border:0;
+  /* tinte suave dorado/cálido sobre el mapa de Google — sin romper la legibilidad */
+  filter:saturate(.8) brightness(.92) contrast(1.05) hue-rotate(-6deg);}
+@media(min-width:520px){.map-iframe{height:340px;}}
 .map-info{padding:20px 20px 22px;}
 .map-info h3{font-family:var(--f-display);font-weight:600;font-size:16px;letter-spacing:.06em;color:var(--gold-bright);}
 .map-addr{font-size:13.5px;color:var(--muted);margin:8px 0 14px;line-height:1.5;}
