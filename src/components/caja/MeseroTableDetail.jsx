@@ -3,11 +3,27 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTables } from '../../lib/useTables.js';
 import { useOpenOrders } from '../../lib/useOrders.js';
-import { getOrCreateOpenOrder, addItemsToOrder, cancelBatch } from '../../lib/orderApi.js';
+import { getOrCreateOpenOrder, addItemsToOrder, cancelBatch, cancelOrder } from '../../lib/orderApi.js';
 import { getSession } from '../../lib/cajaSession.js';
 import { money, formatTime, minutesSince } from '../../lib/format.js';
 import { ProductPicker } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
+
+const draftKey = (tableId) => `botanica_draft_mesa_${tableId}`;
+function loadDraft(tableId) {
+  try {
+    const raw = localStorage.getItem(draftKey(tableId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed ? parsed : {};
+  } catch { return {}; }
+}
+function saveDraft(tableId, draft) {
+  try {
+    if (!draft || Object.keys(draft).length === 0) localStorage.removeItem(draftKey(tableId));
+    else localStorage.setItem(draftKey(tableId), JSON.stringify(draft));
+  } catch {}
+}
 
 export function MeseroTableDetail() {
   const { tableId } = useParams();
@@ -24,11 +40,17 @@ export function MeseroTableDetail() {
 
   const [orderId, setOrderId] = useState(order?.id ?? null);
   const [opening, setOpening] = useState(false);
-  const [draft, setDraft] = useState({}); // {product_id: {product, qty}}
+  // Draft persistido por mesa en localStorage — sobrevive recargas / pérdida de wifi.
+  const [draft, setDraft] = useState(() => loadDraft(tableId));
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [payOpen, setPayOpen] = useState(false);
   const [paidToast, setPaidToast] = useState(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  // Persiste draft en cada cambio.
+  useEffect(() => { saveDraft(tableId, draft); }, [tableId, draft]);
 
   // Asegura una orden abierta apenas entramos a la mesa.
   useEffect(() => {
@@ -101,11 +123,26 @@ export function MeseroTableDetail() {
       setError(null);
       await addItemsToOrder(orderId, draftItems, session.server);
       setDraft({});
+      saveDraft(tableId, {}); // limpieza explícita inmediata
       refresh();
     } catch (e) {
       setError(e.message ?? String(e));
     } finally {
       setSending(false);
+    }
+  };
+
+  const doCancelOrder = async () => {
+    if (!orderId) return;
+    try {
+      setCancelling(true);
+      await cancelOrder(orderId);
+      saveDraft(tableId, {});
+      navigate('/caja/mesero', { replace: true });
+    } catch (e) {
+      setError(e.message ?? String(e));
+      setCancelling(false);
+      setConfirmCancel(false);
     }
   };
 
@@ -132,6 +169,12 @@ export function MeseroTableDetail() {
           <strong>{table?.name ?? `Mesa ${tableId}`}</strong>
           <span>{sentItems.length} ítems enviados</span>
         </div>
+        {orderId && (
+          <button className="mesa-detail-cancel" onClick={() => setConfirmCancel(true)}
+                  aria-label="Cancelar mesa completa" title="Cancelar mesa completa">
+            ✕
+          </button>
+        )}
       </header>
 
       {batches.length > 0 && (
@@ -219,6 +262,28 @@ export function MeseroTableDetail() {
             </div>
             <h3 className="sheet-title">¡Cobro registrado!</h3>
             <p className="sheet-sub">{table?.name} · {money(paidToast.total)} Bs · {paidToast.method}</p>
+          </div>
+        </div>
+      )}
+
+      {confirmCancel && (
+        <div className="sheet-scrim" onClick={() => !cancelling && setConfirmCancel(false)}>
+          <div className="pay-sheet confirm-sheet danger-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-grip" />
+            <h3 className="sheet-title">¿Cancelar la mesa completa?</h3>
+            <p className="sheet-sub">
+              <strong>{table?.name}</strong> — se cancelan todos los items.
+              {sentItems.length > 0 && <><br/>Items ya enviados a cocina: <strong>{sentItems.length}</strong>.</>}
+            </p>
+            <p className="confirm-warn">⚠ Esta acción no se puede deshacer.</p>
+            <div className="confirm-actions">
+              <button className="btn-ghost" onClick={() => setConfirmCancel(false)} disabled={cancelling}>
+                Volver
+              </button>
+              <button className="btn-danger" onClick={doCancelOrder} disabled={cancelling}>
+                {cancelling ? 'Cancelando…' : 'Sí, cancelar mesa'}
+              </button>
+            </div>
           </div>
         </div>
       )}

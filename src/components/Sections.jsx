@@ -109,12 +109,28 @@ export function Location() {
   );
 }
 
+// Fecha por defecto: el evento, o hoy si ya pasó.
+const DEFAULT_DATE = (() => {
+  const event = VENUE.eventTargetISO?.slice(0, 10) ?? '';
+  const today = new Date().toISOString().slice(0, 10);
+  return event && event >= today ? event : today;
+})();
+
+function formatHumanDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
+  } catch { return iso; }
+}
+
 export function Reservas() {
   const [name, setName] = useState('');
   const [people, setPeople] = useState(2);
-  const [when, setWhen] = useState('Sábado 6 de junio');
+  const [when, setWhen] = useState(DEFAULT_DATE);
+  const todayISO = new Date().toISOString().slice(0, 10);
   const msg = encodeURIComponent(
-    `¡Hola Botánica! Quiero reservar una mesa.\n\nNombre: ${name || '—'}\nPersonas: ${people}\nFecha: ${when}`
+    `¡Hola Botánica! Quiero reservar una mesa.\n\nNombre: ${name || '—'}\nPersonas: ${people}\nFecha: ${formatHumanDate(when)}`
   );
   const waUrl = `https://wa.me/${VENUE.whatsapp}?text=${msg}`;
   return (
@@ -136,7 +152,8 @@ export function Reservas() {
           </label>
           <label className="field field--grow">
             <span>Fecha</span>
-            <input type="text" value={when} onChange={(e) => setWhen(e.target.value)} />
+            <input type="date" value={when} min={todayISO}
+                   onChange={(e) => setWhen(e.target.value)} />
           </label>
         </div>
         <a className="btn-wa btn-gold--block" href={waUrl} target="_blank" rel="noopener">

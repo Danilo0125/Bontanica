@@ -1,11 +1,13 @@
 // CocinaView.jsx — cola de tandas pendientes con realtime + timer color-coded.
-import { useEffect, useMemo, useState } from 'react';
+// Beep al llegar tanda nueva + confirmación al marcar Listo (anti-toque accidental).
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOpenOrders } from '../../lib/useOrders.js';
 import { useTables } from '../../lib/useTables.js';
 import { markBatchReady } from '../../lib/orderApi.js';
 import { formatTime, minutesSince, money } from '../../lib/format.js';
 
 const NAME_MAP = { ochito: 'Ochito', nath: 'Nath' };
+const BEEP_KEY = 'botanica_cocina_audio_on';
 
 // Heartbeat para refrescar los timers cada 30s — sin re-fetch a DB.
 function useTick(ms = 30000) {
@@ -47,21 +49,85 @@ function buildBatches(orders, tablesById) {
   return out;
 }
 
+// Beep simple con Web Audio API — sin necesidad de archivo de audio.
+// Tono de campanita: dos notas cortas en cascada.
+function playBeep(audioCtx) {
+  try {
+    const ctx = audioCtx ?? new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    const tones = [880, 660]; // A5, E5 (descendente, agradable)
+    tones.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now + i * 0.14);
+      gain.gain.linearRampToValueAtTime(0.18, now + i * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 0.35);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.14);
+      osc.stop(now + i * 0.14 + 0.4);
+    });
+  } catch { /* navegador sin Web Audio o autoplay bloqueado */ }
+}
+
 export function CocinaView() {
   const { orders, loading, error } = useOpenOrders('cocina-orders');
   const { tables } = useTables();
   const [busy, setBusy] = useState({}); // {batchId: true}
-  useTick(30000); // refresca timers
+  const [confirmId, setConfirmId] = useState(null); // batchId pendiente de confirmar
+  const [audioOn, setAudioOn] = useState(() => {
+    try { return localStorage.getItem(BEEP_KEY) !== 'off'; } catch { return true; }
+  });
+  const audioCtxRef = useRef(null);
+  const seenBatchesRef = useRef(null);
+  useTick(30000);
 
   const tablesById = useMemo(() => new Map(tables.map((t) => [t.id, t])), [tables]);
   const allBatches = useMemo(() => buildBatches(orders, tablesById), [orders, tablesById]);
   const pending = allBatches.filter((b) => b.status === 'pending');
-  const ready = allBatches.filter((b) => b.status === 'ready').slice(-6); // recientes
+  const ready = allBatches.filter((b) => b.status === 'ready').slice(-6);
 
-  const markReady = async (batchId) => {
-    setBusy((b) => ({ ...b, [batchId]: true }));
-    try { await markBatchReady(batchId); }
-    finally { setBusy((b) => { const n = { ...b }; delete n[batchId]; return n; }); }
+  // Detección de batches nuevos para disparar beep.
+  useEffect(() => {
+    if (loading) return;
+    const ids = new Set(pending.map((b) => b.id));
+    // primer render: solo memorizar, no beep
+    if (seenBatchesRef.current === null) {
+      seenBatchesRef.current = ids;
+      return;
+    }
+    const prev = seenBatchesRef.current;
+    const newOnes = [...ids].filter((id) => !prev.has(id));
+    if (newOnes.length > 0 && audioOn) {
+      playBeep(audioCtxRef.current);
+    }
+    seenBatchesRef.current = ids;
+  }, [pending, loading, audioOn]);
+
+  const toggleAudio = () => {
+    setAudioOn((v) => {
+      const next = !v;
+      try { localStorage.setItem(BEEP_KEY, next ? 'on' : 'off'); } catch {}
+      if (next) {
+        // Inicializar AudioContext con interacción del usuario (requerido por autoplay policy)
+        try {
+          audioCtxRef.current = audioCtxRef.current ?? new (window.AudioContext || window.webkitAudioContext)();
+          if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+          playBeep(audioCtxRef.current); // beep de confirmación
+        } catch {}
+      }
+      return next;
+    });
+  };
+
+  const confirmReady = async () => {
+    if (!confirmId) return;
+    const id = confirmId;
+    setConfirmId(null);
+    setBusy((b) => ({ ...b, [id]: true }));
+    try { await markBatchReady(id); }
+    finally { setBusy((b) => { const n = { ...b }; delete n[id]; return n; }); }
   };
 
   if (error) {
@@ -72,9 +138,18 @@ export function CocinaView() {
     return <div className="caja-empty">Cargando cola…</div>;
   }
 
+  const confirmBatch = confirmId ? pending.find((b) => b.id === confirmId) : null;
+
   return (
     <div className="cocina-view">
-      <h2 className="caja-h2">Cola de cocina <span className="cocina-count">{pending.length}</span></h2>
+      <h2 className="caja-h2">
+        Cola de cocina <span className="cocina-count">{pending.length}</span>
+        <button className="audio-toggle" onClick={toggleAudio}
+                aria-label={audioOn ? 'Silenciar avisos' : 'Activar avisos sonoros'}
+                title={audioOn ? 'Sonido activo · tocá para silenciar' : 'Silenciado · tocá para activar'}>
+          {audioOn ? '🔔' : '🔕'}
+        </button>
+      </h2>
 
       {pending.length === 0 && (
         <div className="cocina-empty">
@@ -112,7 +187,7 @@ export function CocinaView() {
               <button
                 className="btn-gold btn-gold--block"
                 disabled={!!busy[b.id]}
-                onClick={() => markReady(b.id)}>
+                onClick={() => setConfirmId(b.id)}>
                 {busy[b.id] ? 'Marcando…' : '✓ Listo'}
               </button>
             </article>
@@ -132,6 +207,28 @@ export function CocinaView() {
             ))}
           </ul>
         </details>
+      )}
+
+      {confirmBatch && (
+        <div className="sheet-scrim" onClick={() => setConfirmId(null)}>
+          <div className="pay-sheet confirm-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-grip" />
+            <h3 className="sheet-title">¿Marcar como listo?</h3>
+            <p className="sheet-sub">
+              <strong>{confirmBatch.table?.name}</strong> ·{' '}
+              {confirmBatch.items.reduce((s, it) => s + it.qty, 0)} ítems
+            </p>
+            <ul className="confirm-items">
+              {confirmBatch.items.map((it) => (
+                <li key={it.id}><span className="qty">{it.qty}×</span> {it.product_name_snapshot}</li>
+              ))}
+            </ul>
+            <div className="confirm-actions">
+              <button className="btn-ghost" onClick={() => setConfirmId(null)}>Cancelar</button>
+              <button className="btn-gold" onClick={confirmReady}>Sí, está listo</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

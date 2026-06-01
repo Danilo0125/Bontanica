@@ -1,13 +1,28 @@
 // PaymentSheet.jsx — bottom-sheet de cobro (efectivo / QR).
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { money } from '../../lib/format.js';
 import { payOrder } from '../../lib/orderApi.js';
+
+// Si el archivo /assets/qr-pago.png existe, lo usamos. Si no, mostramos
+// el banner "QR pendiente" y aceptamos el pago como manual.
+const QR_PATH = '/assets/qr-pago.png';
+function useQrAvailability() {
+  const [available, setAvailable] = useState(null); // null=checking | true | false
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setAvailable(true);
+    img.onerror = () => setAvailable(false);
+    img.src = QR_PATH;
+  }, []);
+  return available;
+}
 
 export function PaymentSheet({ order, total, onClose, onPaid }) {
   const [step, setStep] = useState('choose'); // 'choose' | 'efectivo' | 'qr'
   const [received, setReceived] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const qrAvailable = useQrAvailability();
 
   const change = step === 'efectivo' && received !== '' ? Number(received) - total : null;
 
@@ -80,12 +95,21 @@ export function PaymentSheet({ order, total, onClose, onPaid }) {
             <h3 className="sheet-title">QR / Transferencia</h3>
             <p className="sheet-sub">Total: <strong>{money(total)} Bs</strong></p>
             <div className="qr-box">
-              <div className="qr-fake" aria-hidden="true">
-                {Array.from({ length: 144 }).map((_, i) => (
-                  <span key={i} style={{ opacity: (i * 73 % 10) > 4 ? 1 : 0 }} />
-                ))}
-              </div>
-              <p>Pendiente: API de pago real.</p>
+              {qrAvailable === null && <div className="qr-loading">Cargando QR…</div>}
+              {qrAvailable === true && (
+                <>
+                  <img className="qr-img" src={QR_PATH} alt="QR de pago de Botánica" />
+                  <p>Escaneá con tu app del banco y confirmá manualmente abajo.</p>
+                </>
+              )}
+              {qrAvailable === false && (
+                <div className="qr-pending">
+                  <span className="qr-pending-icon" aria-hidden="true">⚠️</span>
+                  <strong>QR aún no configurado</strong>
+                  <p>Cobrá manualmente (efectivo o transferencia directa) y confirmá abajo.<br/>
+                  <small>Cuando tengas el QR del banco, guardalo como <code>public/assets/qr-pago.png</code>.</small></p>
+                </div>
+              )}
             </div>
             {error && <p className="caja-error">{error}</p>}
             <button className="btn-gold btn-gold--block" disabled={submitting}
