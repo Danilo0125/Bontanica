@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTables } from '../../lib/useTables.js';
 import { useOpenOrders } from '../../lib/useOrders.js';
-import { getOrCreateOpenOrder, addItemsToOrder, cancelBatch, cancelOrder } from '../../lib/orderApi.js';
+import { getOrCreateOpenOrder, addItemsToOrder, cancelBatch, cancelOrder, updateItemQty, removeItem } from '../../lib/orderApi.js';
 import { getSession } from '../../lib/cajaSession.js';
 import { money, formatTime, minutesSince } from '../../lib/format.js';
 import { ProductPicker } from './ProductPicker.jsx';
@@ -191,16 +191,41 @@ export function MeseroTableDetail() {
                 </span>
               </div>
               <ul className="batch-items">
-                {b.items.map((it) => (
-                  <li key={it.id}>
-                    <span>{it.qty}× {it.product_name_snapshot}</span>
-                    <span>{money(it.unit_price_snapshot * it.qty)} Bs</span>
-                  </li>
-                ))}
+                {b.items.map((it) => {
+                  const editable = it.status === 'pending';
+                  return (
+                    <li key={it.id} className={`batch-item batch-item--${it.status}`}>
+                      <div className="batch-item-main">
+                        <span className="batch-item-name">
+                          <span className="batch-item-qty">{it.qty}×</span>
+                          {it.product_name_snapshot}
+                        </span>
+                        <span className="batch-item-price">{money(it.unit_price_snapshot * it.qty)} Bs</span>
+                      </div>
+                      {editable && (
+                        <div className="batch-item-actions">
+                          <button className="ic-btn" onClick={async () => {
+                            if (it.qty <= 1) { await removeItem(it.id); }
+                            else { await updateItemQty(it.id, it.qty - 1); }
+                            refresh();
+                          }} aria-label="Quitar uno">−</button>
+                          <button className="ic-btn" onClick={async () => {
+                            await updateItemQty(it.id, it.qty + 1);
+                            refresh();
+                          }} aria-label="Sumar uno">+</button>
+                          <button className="ic-btn ic-btn--danger" onClick={async () => {
+                            await removeItem(it.id);
+                            refresh();
+                          }} aria-label="Eliminar item">✕</button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
               {b.status === 'pending' && (
                 <button className="batch-cancel" onClick={() => cancelBatch(b.id).then(refresh)}>
-                  Cancelar tanda
+                  Cancelar tanda completa
                 </button>
               )}
             </div>

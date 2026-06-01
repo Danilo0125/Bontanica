@@ -75,6 +75,28 @@ export async function cancelBatch(batchId) {
   if (error) throw error;
 }
 
+// Ajusta qty de un item específico ya enviado a cocina (mientras esté pending).
+export async function updateItemQty(itemId, newQty) {
+  if (!Number.isInteger(newQty) || newQty < 1) {
+    throw new Error('qty debe ser entero ≥ 1');
+  }
+  const { error } = await supabase
+    .from('order_items')
+    .update({ qty: newQty })
+    .eq('id', itemId);
+  if (error) throw error;
+}
+
+// Cancela un item específico (no toda la tanda). El item queda visible
+// en cocina con status='cancelled' por unos segundos antes de filtrarse.
+export async function removeItem(itemId) {
+  const { error } = await supabase
+    .from('order_items')
+    .update({ status: 'cancelled' })
+    .eq('id', itemId);
+  if (error) throw error;
+}
+
 export async function payOrder(orderId, { method, received, total }) {
   const patch = {
     status: 'paid',
@@ -95,8 +117,9 @@ export async function cancelOrder(orderId) {
   if (error) throw error;
 }
 
-// Trae todas las órdenes abiertas con sus items (no cancelados).
-// Devuelve [{ ...order, items: [...] }].
+// Trae todas las órdenes abiertas con sus items.
+// Filtra items cancelled hace más de 30s (cocina ve los cancelados recientes
+// para entender qué pasó). Devuelve [{ ...order, items: [...] }].
 export async function fetchOpenOrders() {
   const { data, error } = await supabase
     .from('orders')
@@ -104,8 +127,13 @@ export async function fetchOpenOrders() {
     .eq('status', 'open')
     .order('opened_at', { ascending: true });
   if (error) throw error;
+  const cutoff = Date.now() - 30000;
   return (data ?? []).map((o) => ({
     ...o,
-    items: (o.items ?? []).filter((it) => it.status !== 'cancelled'),
+    items: (o.items ?? []).filter((it) => {
+      if (it.status !== 'cancelled') return true;
+      const ts = new Date(it.last_modified_at ?? it.sent_at).getTime();
+      return ts > cutoff;
+    }),
   }));
 }

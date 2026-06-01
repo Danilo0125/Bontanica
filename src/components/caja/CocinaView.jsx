@@ -49,13 +49,17 @@ function buildBatches(orders, tablesById) {
   return out;
 }
 
-// Beep simple con Web Audio API — sin necesidad de archivo de audio.
-// Tono de campanita: dos notas cortas en cascada.
-function playBeep(audioCtx) {
+// Tonos sintetizados con Web Audio — diferentes según el evento.
+const TONES = {
+  new:    [880, 660],        // tanda nueva — A5→E5 descendente, alegre
+  change: [523, 392, 523],   // cambio — C5→G4→C5, llamada atención
+  cancel: [440, 330],        // cancelación — A4→E4, grave-grave
+};
+function playBeep(audioCtx, kind = 'new') {
   try {
     const ctx = audioCtx ?? new (window.AudioContext || window.webkitAudioContext)();
     const now = ctx.currentTime;
-    const tones = [880, 660]; // A5, E5 (descendente, agradable)
+    const tones = TONES[kind] ?? TONES.new;
     tones.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -71,6 +75,14 @@ function playBeep(audioCtx) {
   } catch { /* navegador sin Web Audio o autoplay bloqueado */ }
 }
 
+// Un item está "editado" si fue modificado > 5s después de su envío original.
+function wasEdited(item) {
+  if (!item.last_modified_at) return false;
+  const sent = new Date(item.sent_at).getTime();
+  const mod = new Date(item.last_modified_at).getTime();
+  return mod - sent > 5000;
+}
+
 export function CocinaView() {
   const { orders, loading, error } = useOpenOrders('cocina-orders');
   const { tables } = useTables();
@@ -80,7 +92,7 @@ export function CocinaView() {
     try { return localStorage.getItem(BEEP_KEY) !== 'off'; } catch { return true; }
   });
   const audioCtxRef = useRef(null);
-  const seenBatchesRef = useRef(null);
+  const seenSnapshotRef = useRef(null); // Map<batchId, signature>
   useTick(30000);
 
   const tablesById = useMemo(() => new Map(tables.map((t) => [t.id, t])), [tables]);
@@ -88,22 +100,42 @@ export function CocinaView() {
   const pending = allBatches.filter((b) => b.status === 'pending');
   const ready = allBatches.filter((b) => b.status === 'ready').slice(-6);
 
-  // Detección de batches nuevos para disparar beep.
+  // Detección de cambios para beeps contextuales.
+  // - Nuevo batch (no estaba en el snapshot anterior) → beep 'new'
+  // - Items modificados (qty cambia o nuevo cancelled) → beep 'change' o 'cancel'
   useEffect(() => {
     if (loading) return;
-    const ids = new Set(pending.map((b) => b.id));
-    // primer render: solo memorizar, no beep
-    if (seenBatchesRef.current === null) {
-      seenBatchesRef.current = ids;
+    const sig = (b) => b.items.map((it) => `${it.id}:${it.qty}:${it.status}`).sort().join('|');
+    const snapshot = new Map(allBatches.map((b) => [b.id, sig(b)]));
+    if (seenSnapshotRef.current === null) {
+      seenSnapshotRef.current = snapshot;
       return;
     }
-    const prev = seenBatchesRef.current;
-    const newOnes = [...ids].filter((id) => !prev.has(id));
-    if (newOnes.length > 0 && audioOn) {
-      playBeep(audioCtxRef.current);
+    const prev = seenSnapshotRef.current;
+    let newBatch = false, change = false, cancel = false;
+    for (const [id, s] of snapshot) {
+      if (!prev.has(id)) {
+        // Batch nuevo: pending o ya cancelado/ready (puede llegar en ese estado en updates atrasados)
+        const b = allBatches.find((x) => x.id === id);
+        if (b?.status === 'pending') newBatch = true;
+        continue;
+      }
+      if (prev.get(id) !== s) {
+        // Algo cambió en items de un batch existente
+        const b = allBatches.find((x) => x.id === id);
+        const anyCancelled = b?.items.some((it) => it.status === 'cancelled');
+        if (anyCancelled) cancel = true;
+        else change = true;
+      }
     }
-    seenBatchesRef.current = ids;
-  }, [pending, loading, audioOn]);
+    if (audioOn) {
+      // Priorizar: nuevo > cancel > change (un solo beep por tick)
+      if (newBatch) playBeep(audioCtxRef.current, 'new');
+      else if (cancel) playBeep(audioCtxRef.current, 'cancel');
+      else if (change) playBeep(audioCtxRef.current, 'change');
+    }
+    seenSnapshotRef.current = snapshot;
+  }, [allBatches, loading, audioOn]);
 
   const toggleAudio = () => {
     setAudioOn((v) => {
@@ -162,14 +194,18 @@ export function CocinaView() {
         {pending.map((b) => {
           const mins = minutesSince(b.sent_at);
           const level = urgencyLevel(mins);
+          const hasChanges = b.items.some((it) => wasEdited(it) || it.status === 'cancelled');
           return (
-            <article key={b.id} className={`cocina-card cocina-card--${level}`}>
+            <article key={b.id} className={`cocina-card cocina-card--${level} ${hasChanges ? 'cocina-card--changed' : ''}`}>
               <header className="cocina-card-head">
                 <strong>{b.table?.name ?? `Mesa ${b.table_id}`}</strong>
-                <span className={`cocina-timer cocina-timer--${level}`}>
-                  <span className="cocina-timer-dot" />
-                  {mins === 0 ? 'recién' : `${mins} min`}
-                </span>
+                <div className="cocina-card-head-right">
+                  {hasChanges && <span className="cocina-changed-pill">✏ Cambió</span>}
+                  <span className={`cocina-timer cocina-timer--${level}`}>
+                    <span className="cocina-timer-dot" />
+                    {mins === 0 ? 'recién' : `${mins} min`}
+                  </span>
+                </div>
               </header>
               <p className="cocina-card-server">
                 <span className="cocina-card-by">por</span> {NAME_MAP[b.server_id] ?? b.server_id}
@@ -177,12 +213,18 @@ export function CocinaView() {
                 <span className="cocina-card-time">{formatTime(b.sent_at)}</span>
               </p>
               <ul className="cocina-card-items">
-                {b.items.map((it) => (
-                  <li key={it.id}>
-                    <span className="qty">{it.qty}×</span>
-                    <span>{it.product_name_snapshot}</span>
-                  </li>
-                ))}
+                {b.items.map((it) => {
+                  const edited = wasEdited(it) && it.status === 'pending';
+                  const cancelled = it.status === 'cancelled';
+                  return (
+                    <li key={it.id} className={`coc-item ${edited ? 'coc-item--edited' : ''} ${cancelled ? 'coc-item--cancelled' : ''}`}>
+                      <span className="qty">{it.qty}×</span>
+                      <span className="coc-item-name">{it.product_name_snapshot}</span>
+                      {edited && <span className="coc-item-flag">✏ editado</span>}
+                      {cancelled && <span className="coc-item-flag coc-item-flag--crit">✕ cancelado</span>}
+                    </li>
+                  );
+                })}
               </ul>
               <button
                 className="btn-gold btn-gold--block"

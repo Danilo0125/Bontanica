@@ -10,6 +10,9 @@ export function CajaLayout() {
   const navigate = useNavigate();
   const session = getSession();
   const isCocina = loc.pathname.startsWith('/caja/cocina');
+  const isAdmin = loc.pathname.startsWith('/caja/admin');
+  const isMesero = !isCocina && !isAdmin;
+  const where = isAdmin ? 'Admin' : isCocina ? 'Cocina' : 'Mesero';
 
   const logout = () => {
     clearSession();
@@ -23,14 +26,16 @@ export function CajaLayout() {
           <span className="caja-leaf" aria-hidden="true">🌿</span>
           <div className="caja-top-id">
             <strong>{NAME_MAP[session?.server] ?? '—'}</strong>
-            <span>en {isCocina ? 'Cocina' : 'Mesero'}</span>
+            <span>en {where}</span>
           </div>
         </div>
         <div className="caja-top-tabs" role="tablist">
-          <Link to="/caja/mesero" role="tab" aria-selected={!isCocina}
-                className={`caja-tab ${!isCocina ? 'is-active' : ''}`}>Mesero</Link>
+          <Link to="/caja/mesero" role="tab" aria-selected={isMesero}
+                className={`caja-tab ${isMesero ? 'is-active' : ''}`}>Mesero</Link>
           <Link to="/caja/cocina" role="tab" aria-selected={isCocina}
                 className={`caja-tab ${isCocina ? 'is-active' : ''}`}>Cocina</Link>
+          <Link to="/caja/admin" role="tab" aria-selected={isAdmin}
+                className={`caja-tab ${isAdmin ? 'is-active' : ''}`}>Admin</Link>
         </div>
         <button className="caja-top-out" onClick={logout} aria-label="Salir">
           Salir

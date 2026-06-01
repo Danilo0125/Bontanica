@@ -7,6 +7,7 @@ import { ProtectedRoute } from './components/caja/ProtectedRoute.jsx';
 import { MeseroView } from './components/caja/MeseroView.jsx';
 import { MeseroTableDetail } from './components/caja/MeseroTableDetail.jsx';
 import { CocinaView } from './components/caja/CocinaView.jsx';
+import { AdminDashboard } from './components/caja/AdminDashboard.jsx';
 
 export function App() {
   return (
@@ -24,6 +25,7 @@ export function App() {
           <Route path="/caja/mesero" element={<MeseroView />} />
           <Route path="/caja/mesero/:tableId" element={<MeseroTableDetail />} />
           <Route path="/caja/cocina" element={<CocinaView />} />
+          <Route path="/caja/admin" element={<AdminDashboard />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
