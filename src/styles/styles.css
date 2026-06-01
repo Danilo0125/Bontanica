@@ -240,6 +240,11 @@ small{font-size:.62em;font-weight:500;letter-spacing:.02em;}
 .cat-tag{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
   border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
 .item-list{list-style:none;display:flex;flex-direction:column;gap:14px;}
+.item--with-img{display:grid;grid-template-columns:64px 1fr;gap:14px;align-items:center;}
+.item-img{width:64px;height:64px;object-fit:cover;border-radius:10px;
+  border:1px solid var(--line-soft);
+  filter:brightness(.96) contrast(1.04) saturate(1.08);}
+.item-text{min-width:0;}
 .item-main{display:flex;align-items:baseline;gap:8px;}
 .item-name{font-size:16px;font-weight:500;color:var(--cream);}
 .item-dots{flex:1;border-bottom:1px dotted var(--line);transform:translateY(-3px);}

@@ -40,13 +40,19 @@ export function Catalog() {
                 </div>
                 <ul className="item-list">
                   {cat.items.map((it) => (
-                    <li className="item" key={it.id}>
-                      <div className="item-main">
-                        <span className="item-name">{it.name}</span>
-                        <span className="item-dots" />
-                        <span className="item-price">{it.price} <small>Bs</small></span>
+                    <li className={`item ${it.image_url ? 'item--with-img' : ''}`} key={it.id}>
+                      {it.image_url && (
+                        <img className="item-img" src={it.image_url} alt={it.name}
+                             loading="lazy" width="64" height="64" />
+                      )}
+                      <div className="item-text">
+                        <div className="item-main">
+                          <span className="item-name">{it.name}</span>
+                          <span className="item-dots" />
+                          <span className="item-price">{it.price} <small>Bs</small></span>
+                        </div>
+                        {it.description && <p className="item-desc">{it.description}</p>}
                       </div>
-                      {it.description && <p className="item-desc">{it.description}</p>}
                     </li>
                   ))}
                 </ul>

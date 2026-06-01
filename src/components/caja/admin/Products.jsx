@@ -1,6 +1,7 @@
-// Products.jsx — tabla CRUD de productos con edición inline.
-import { useEffect, useMemo, useState } from 'react';
+// Products.jsx — tabla CRUD de productos con edición inline + subida de imágenes.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { listAllProducts, createProduct, updateProduct } from '../../../lib/productApi.js';
+import { uploadProductImage, deleteProductImageByUrl } from '../../../lib/storageApi.js';
 import { useToast } from '../Toasts.jsx';
 
 function NewProductModal({ onClose, onCreated, existingCategories }) {
@@ -89,6 +90,38 @@ function NewProductModal({ onClose, onCreated, existingCategories }) {
   );
 }
 
+function ProductImageCell({ product, disabled, onUpload, onRemove }) {
+  const inputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const pick = () => inputRef.current?.click();
+  const change = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = ''; // permite re-elegir mismo archivo
+    if (!f) return;
+    setUploading(true);
+    try { await onUpload(product, f); } finally { setUploading(false); }
+  };
+  return (
+    <div className="img-cell">
+      <button type="button" className="img-thumb" onClick={pick}
+              disabled={disabled || uploading}
+              aria-label={product.image_url ? 'Cambiar imagen' : 'Subir imagen'}>
+        {product.image_url
+          ? <img src={product.image_url} alt={product.name} loading="lazy" />
+          : <span className="img-placeholder">📷</span>}
+        {uploading && <span className="img-uploading">…</span>}
+      </button>
+      {product.image_url && !uploading && (
+        <button type="button" className="img-remove" onClick={() => onRemove(product)}
+                disabled={disabled} aria-label="Quitar imagen" title="Quitar imagen">×</button>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" onChange={change}
+             style={{ display: 'none' }} />
+    </div>
+  );
+}
+
 export function Products() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,6 +157,35 @@ export function Products() {
     } finally { setSavingId(null); }
   };
 
+  const onUploadImage = async (product, file) => {
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { toast.error('La imagen supera 8MB'); return; }
+    setSavingId(product.id);
+    try {
+      const { url } = await uploadProductImage(product.id, file);
+      const updated = await updateProduct(product.id, { image_url: url });
+      // Borrar la imagen vieja después (best effort)
+      if (product.image_url) deleteProductImageByUrl(product.image_url);
+      setProducts((arr) => arr.map((p) => (p.id === product.id ? updated : p)));
+      toast.success(`Foto de "${product.name}" actualizada`);
+    } catch (e) {
+      toast.error(`Subida falló: ${e.message}`);
+    } finally { setSavingId(null); }
+  };
+
+  const onRemoveImage = async (product) => {
+    if (!product.image_url) return;
+    if (!confirm(`¿Quitar la imagen de "${product.name}"?`)) return;
+    setSavingId(product.id);
+    try {
+      const oldUrl = product.image_url;
+      const updated = await updateProduct(product.id, { image_url: null });
+      deleteProductImageByUrl(oldUrl);
+      setProducts((arr) => arr.map((p) => (p.id === product.id ? updated : p)));
+    } catch (e) { toast.error(e.message); }
+    finally { setSavingId(null); }
+  };
+
   if (loading) return <p className="admin-empty">Cargando productos…</p>;
 
   return (
@@ -140,6 +202,7 @@ export function Products() {
         <table className="admin-table">
           <thead>
             <tr>
+              <th style={{ width: 70 }}>Foto</th>
               <th>Producto</th>
               <th>Categoría</th>
               <th className="admin-cell-num">Precio (Bs)</th>
@@ -150,6 +213,10 @@ export function Products() {
           <tbody>
             {products.map((p) => (
               <tr key={p.id}>
+                <td>
+                  <ProductImageCell product={p} disabled={savingId === p.id}
+                                    onUpload={onUploadImage} onRemove={onRemoveImage} />
+                </td>
                 <td>
                   <input defaultValue={p.name}
                     onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== p.name) onPatch(p.id, { name: v }); }} />
