@@ -1,7 +1,7 @@
-// hero.jsx — Hero animado con 3 variaciones de estilo
-const { useState, useEffect, useRef, useMemo } = React;
+// Hero.jsx — Hero animado con 3 variaciones de estilo
+import { useState, useEffect, useRef } from 'react';
+import { VENUE } from '../data/data.js';
 
-// ---------- Countdown ----------
 function useCountdown(targetISO) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -20,13 +20,12 @@ function useCountdown(targetISO) {
 function CountdownUnit({ value, label }) {
   return (
     <div className="cd-unit">
-      <span className="cd-num">{String(value).padStart(2, "0")}</span>
+      <span className="cd-num">{String(value).padStart(2, '0')}</span>
       <span className="cd-lbl">{label}</span>
     </div>
   );
 }
 
-// ---------- Garden light particles ----------
 const LIGHTS = [
   { l: 8, t: 64, s: 1.1, dur: 3.4, d: 0 }, { l: 22, t: 78, s: 0.7, dur: 4.1, d: 0.6 },
   { l: 30, t: 58, s: 0.9, dur: 3.0, d: 1.2 }, { l: 44, t: 70, s: 1.3, dur: 4.6, d: 0.2 },
@@ -45,7 +44,6 @@ const LeafSVG = ({ style, className }) => (
   </svg>
 );
 
-// Swaying foreground fronds for "selva" variation
 const Frond = ({ side }) => (
   <svg className={`frond frond-${side}`} viewBox="0 0 200 320" aria-hidden="true">
     <g fill="none" stroke="var(--gold)" strokeWidth="1.4" opacity="0.4">
@@ -61,18 +59,17 @@ const Frond = ({ side }) => (
   </svg>
 );
 
-function Hero({ heroStyle, onReserve, onScrollDown }) {
+export function Hero({ heroStyle, onReserve, onScrollDown }) {
   const { d, h, m, s, done } = useCountdown(VENUE.eventTargetISO);
   const heroRef = useRef(null);
 
-  // subtle parallax on scroll
   const [scrollY, setScrollY] = useState(0);
   useEffect(() => {
-    const root = document.querySelector(".app-scroll");
+    const root = document.querySelector('.app-scroll');
     if (!root) return;
     const onScroll = () => setScrollY(root.scrollTop);
-    root.addEventListener("scroll", onScroll, { passive: true });
-    return () => root.removeEventListener("scroll", onScroll);
+    root.addEventListener('scroll', onScroll, { passive: true });
+    return () => root.removeEventListener('scroll', onScroll);
   }, []);
 
   return (
@@ -80,29 +77,27 @@ function Hero({ heroStyle, onReserve, onScrollDown }) {
       <div className="hero-bg" style={{ transform: `translateY(${scrollY * 0.18}px) scale(1.04)` }} />
       <div className="hero-vignette" />
 
-      {heroStyle === "vitral" && <div className="hero-sweep" />}
-      {heroStyle === "vitral" && <div className="hero-frame" />}
-      {heroStyle === "selva" && <div className="hero-glow" />}
-      {heroStyle === "selva" && <><Frond side="l" /><Frond side="r" /></>}
+      {heroStyle === 'vitral' && <div className="hero-sweep" />}
+      {heroStyle === 'vitral' && <div className="hero-frame" />}
+      {heroStyle === 'selva' && <div className="hero-glow" />}
+      {heroStyle === 'selva' && <><Frond side="l" /><Frond side="r" /></>}
 
-      {/* twinkling garden lights */}
       <div className="lights">
         {LIGHTS.map((p, i) => (
           <span key={i} className="light"
-            style={{ left: p.l + "%", top: p.t + "%", "--ls": p.s, animationDuration: p.dur + "s", animationDelay: p.d + "s" }} />
+            style={{ left: p.l + '%', top: p.t + '%', '--ls': p.s, animationDuration: p.dur + 's', animationDelay: p.d + 's' }} />
         ))}
       </div>
 
-      {/* drifting leaves */}
       <div className="leaves">
         {[12, 34, 56, 72, 88].map((l, i) => (
           <LeafSVG key={i} className="leaf"
-            style={{ left: l + "%", animationDuration: 9 + i * 2 + "s", animationDelay: i * 1.7 + "s" }} />
+            style={{ left: l + '%', animationDuration: 9 + i * 2 + 's', animationDelay: i * 1.7 + 's' }} />
         ))}
       </div>
 
-      {/* foreground content (lower third — logo is baked into photo above) */}
       <div className="hero-content">
+        <h1 className="hero-event-title">{VENUE.eventTitle}</h1>
         <div className="event-chip">
           <span className="dot" />
           {VENUE.eventDate} · {VENUE.eventTime}
@@ -131,5 +126,3 @@ function Hero({ heroStyle, onReserve, onScrollDown }) {
     </section>
   );
 }
-
-window.Hero = Hero;

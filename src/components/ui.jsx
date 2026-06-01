@@ -1,28 +1,28 @@
 // ui.jsx — helpers compartidos (Reveal on-scroll, títulos de sección)
-const { useState: useStateU, useEffect: useEffectU, useRef: useRefU } = React;
+import { useState, useEffect, useRef } from 'react';
 
-function Reveal({ children, delay = 0, className = "", as = "div" }) {
-  const ref = useRefU(null);
-  const [shown, setShown] = useStateU(false);
-  useEffectU(() => {
+export function Reveal({ children, delay = 0, className = '', as = 'div' }) {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.unobserve(el); } }),
-      { threshold: 0.15, root: document.querySelector(".app-scroll") }
+      { threshold: 0.15, root: document.querySelector('.app-scroll') }
     );
     io.observe(el);
     return () => io.disconnect();
   }, []);
   const Tag = as;
   return (
-    <Tag ref={ref} className={`reveal ${shown ? "is-shown" : ""} ${className}`} style={{ transitionDelay: delay + "ms" }}>
+    <Tag ref={ref} className={`reveal ${shown ? 'is-shown' : ''} ${className}`} style={{ transitionDelay: delay + 'ms' }}>
       {children}
     </Tag>
   );
 }
 
-function SectionTitle({ kicker, title }) {
+export function SectionTitle({ kicker, title }) {
   return (
     <div className="sec-title">
       {kicker && <span className="kicker"><span className="kicker-line" />{kicker}<span className="kicker-line" /></span>}
@@ -30,5 +30,3 @@ function SectionTitle({ kicker, title }) {
     </div>
   );
 }
-
-Object.assign(window, { Reveal, SectionTitle });

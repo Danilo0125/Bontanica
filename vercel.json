@@ -1,9 +1,8 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "cleanUrls": true,
-  "headers": [
-    {
-      "source": "/(.*).jsx",
-      "headers": [{ "key": "Content-Type", "value": "text/jsx; charset=utf-8" }]
-    }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

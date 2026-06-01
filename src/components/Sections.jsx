@@ -1,7 +1,11 @@
-// sections.jsx — Galería, Ubicación, Reservas/Contacto, Redes, About, Footer
-const { useState: useStateS } = React;
+// Sections.jsx — About, Galería, Ubicación, Reservas, Footer
+import { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { VENUE } from '../data/data.js';
+import { Reveal, SectionTitle } from './ui.jsx';
 
-function About() {
+export function About() {
   return (
     <section className="section section--about" data-screen-label="Nosotros">
       <Reveal>
@@ -12,45 +16,89 @@ function About() {
   );
 }
 
+// Galería del local. Distribución de spans elegida para crear ritmo visual
+// (alto / ancho / cuadrado) sobre el grid de 2 columnas.
 const GALLERY = [
-  { id: "g1", span: "tall", ph: "Jardín de noche" },
-  { id: "g2", span: "", ph: "Cócteles" },
-  { id: "g3", span: "", ph: "Pizza al horno" },
-  { id: "g4", span: "wide", ph: "Música en vivo" },
-  { id: "g5", span: "", ph: "Las luces" },
-  { id: "g6", span: "tall", ph: "Rincón verde" },
+  { id: 'g1', span: 'tall', src: '/assets/Pasillo_de arboles_con_luces.jpeg', alt: 'Pasillo de árboles con luces cálidas' },
+  { id: 'g2', span: '',     src: '/assets/Plantas01.jpeg',                    alt: 'Plantas del jardín' },
+  { id: 'g3', span: '',     src: '/assets/Camino01.jpeg',                     alt: 'Camino entre las plantas' },
+  { id: 'g4', span: 'wide', src: '/assets/Patio.jpeg',                        alt: 'Vista del patio principal' },
+  { id: 'g5', span: 'tall', src: '/assets/Pasillo02.jpeg',                    alt: 'Otro pasillo iluminado' },
+  { id: 'g6', span: '',     src: '/assets/Plantas02.jpeg',                    alt: 'Detalle de las plantas' },
+  { id: 'g7', span: '',     src: '/assets/Plantas03.jpeg',                    alt: 'Rincón con vegetación' },
+  { id: 'g8', span: 'wide', src: '/assets/Patio01.jpeg',                      alt: 'Patio al caer la noche' },
+  { id: 'g9', span: '',     src: '/assets/Pasillo021.jpeg',                   alt: 'Pasillo con luces cálidas' },
+  { id: 'g10', span: '',    src: '/assets/Plantas04.jpeg',                    alt: 'Más plantas del jardín' },
+  { id: 'g11', span: 'wide', src: '/assets/Parqueo01.jpeg',                   alt: 'Entrada y parqueo del local' },
 ];
 
-function Gallery() {
+export function Gallery() {
   return (
     <section className="section section--gallery" id="galeria" data-screen-label="Galería">
       <SectionTitle kicker="Galería" title="Noches en Botánica" />
       <Reveal className="gallery-grid">
-        {GALLERY.map((g) => (
-          <image-slot key={g.id} id={g.id} class={`g-slot g-${g.span}`} shape="rounded" radius="14" placeholder={g.ph}></image-slot>
-        ))}
+        {GALLERY.map((g) =>
+          g.src ? (
+            <figure key={g.id} className={`g-slot g-${g.span} g-figure`}>
+              <img src={g.src} alt={g.alt} loading="lazy" />
+              <figcaption>{g.alt}</figcaption>
+            </figure>
+          ) : (
+            <div key={g.id} className={`g-slot g-${g.span} g-placeholder`} aria-label={g.ph}>
+              <span className="g-placeholder-leaf" aria-hidden="true">🌿</span>
+              <span className="g-placeholder-text">{g.ph}</span>
+            </div>
+          )
+        )}
       </Reveal>
-      <Reveal className="gallery-note"><p>Arrastra tus fotos a cada recuadro para llenar la galería.</p></Reveal>
     </section>
   );
 }
 
-function Location() {
+function MapEmbed() {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+    const { lat, lng, zoom } = VENUE.coords;
+    const map = L.map(mapRef.current, {
+      center: [lat, lng], zoom,
+      zoomControl: false, attributionControl: true,
+      scrollWheelZoom: false, dragging: true, doubleClickZoom: true,
+    });
+    mapInstanceRef.current = map;
+
+    // CartoDB Dark Matter: tiles oscuros sin API key. El tinte dorado se
+    // aplica vía CSS filter en .leaflet-tile-pane (ver styles.css).
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 19,
+    }).addTo(map);
+
+    const pinIcon = L.divIcon({
+      className: 'map-pin-icon',
+      html: '<svg viewBox="0 0 24 24" width="34" height="34"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7Z" fill="var(--gold)" stroke="var(--gold-deep)" stroke-width="1"/><circle cx="12" cy="9" r="2.6" fill="var(--bg)"/></svg>',
+      iconSize: [34, 34], iconAnchor: [17, 32],
+    });
+    L.marker([lat, lng], { icon: pinIcon }).addTo(map);
+
+    return () => { map.remove(); mapInstanceRef.current = null; };
+  }, []);
+
+  return <div ref={mapRef} className="leaflet-container-gold" />;
+}
+
+export function Location() {
   return (
     <section className="section section--location" id="ubicacion" data-screen-label="Ubicación">
       <SectionTitle kicker="Cómo llegar" title="Encuéntranos" />
       <Reveal className="map-card">
-        <div className="map-visual" aria-hidden="true">
-          <div className="map-grid" />
-          <div className="map-pin">
-            <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7Z" fill="var(--gold)" /><circle cx="12" cy="9" r="2.6" fill="var(--bg)" /></svg>
-          </div>
-          <span className="map-roads r1" /><span className="map-roads r2" /><span className="map-roads r3" />
-        </div>
+        <MapEmbed />
         <div className="map-info">
-          <h3>Botánica Resto Bar</h3>
-          <p className="map-addr">Jardín interior · consulta la dirección exacta en el mapa.</p>
-          <div className="map-hours"><span className="dot" /> Sáb 6 jun · desde las 18:00</div>
+          <h3>Botánica RestoBar</h3>
+          <p className="map-addr">{VENUE.address}</p>
+          <div className="map-hours"><span className="dot" /> {VENUE.eventDate} · {VENUE.eventTime.toLowerCase()}</div>
           <a className="btn-gold btn-gold--block" href={VENUE.mapsUrl} target="_blank" rel="noopener">
             <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2C8 2 5 5 5 9c0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7Z" fill="none" stroke="currentColor" strokeWidth="1.6" /><circle cx="12" cy="9" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
             Abrir en Google Maps
@@ -61,12 +109,12 @@ function Location() {
   );
 }
 
-function Reservas() {
-  const [name, setName] = useStateS("");
-  const [people, setPeople] = useStateS(2);
-  const [when, setWhen] = useStateS("Sábado 6 de junio");
+export function Reservas() {
+  const [name, setName] = useState('');
+  const [people, setPeople] = useState(2);
+  const [when, setWhen] = useState('Sábado 6 de junio');
   const msg = encodeURIComponent(
-    `¡Hola Botánica! Quiero reservar una mesa.\n\nNombre: ${name || "—"}\nPersonas: ${people}\nFecha: ${when}`
+    `¡Hola Botánica! Quiero reservar una mesa.\n\nNombre: ${name || '—'}\nPersonas: ${people}\nFecha: ${when}`
   );
   const waUrl = `https://wa.me/${VENUE.whatsapp}?text=${msg}`;
   return (
@@ -101,7 +149,8 @@ function Reservas() {
   );
 }
 
-function SocialFooter() {
+export function SocialFooter() {
+  const year = new Date().getFullYear();
   return (
     <footer className="footer" data-screen-label="Footer">
       <div className="footer-leaf" aria-hidden="true">
@@ -120,9 +169,7 @@ function SocialFooter() {
           <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2A10 10 0 0 0 3.5 17.2L2 22l4.9-1.5A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7-2.8-1.1-4.5-3.9-4.6-4.1-.1-.2-1.1-1.4-1.1-2.7s.7-1.9.9-2.2c.2-.2.5-.3.6-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.3 0 .5l-.4.5c-.2.2-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.2.1.4.1.5-.1l.7-.9c.2-.2.3-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.2.1.6 0 1Z" /></svg>
         </a>
       </div>
-      <p className="footer-credit">© 2026 Botánica Resto Bar · Hecho con cariño bajo las luces 🌿</p>
+      <p className="footer-credit">© {year} Botánica RestoBar · Hecho con cariño bajo las luces 🌿</p>
     </footer>
   );
 }
-
-Object.assign(window, { About, Gallery, Location, Reservas, SocialFooter });
