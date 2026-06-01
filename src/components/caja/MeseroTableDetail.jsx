@@ -1,21 +1,31 @@
-// MeseroTableDetail.jsx — vista de una mesa: batches enviados + draft + cobrar.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+// MeseroTableDetail.jsx — vista de una mesa con cobro pre-pago por tanda.
+//
+// Flujo:
+//   1. Draft local (no DB todavía)
+//   2. "Enviar a cocina" → abre PaymentSheet → confirmar cobro → crea batch (paid) + items (pending)
+//   3. Cocina marca items → batch lo ve como ready → mesero recibe toast + sonido
+//   4. Mesero toca "Marcar entregado" → batch.status='delivered'
+//   5. Cuando ningún batch queda en paid (todos delivered/cancelled) → mesa auto-cierra
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTables } from '../../lib/useTables.js';
 import { useOpenOrders } from '../../lib/useOrders.js';
-import { getOrCreateOpenOrder, addItemsToOrder, cancelBatch, cancelOrder, updateItemQty, removeItem } from '../../lib/orderApi.js';
+import {
+  getOrCreateOpenOrder, sendBatchPaid, markBatchDelivered,
+  cancelBatch, cancelOrder, closeOrder,
+} from '../../lib/orderApi.js';
 import { getSession } from '../../lib/cajaSession.js';
 import { money, formatTime, minutesSince } from '../../lib/format.js';
+import { playBeep } from '../../lib/audio.js';
 import { ProductPicker } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
+import { useToast } from './Toasts.jsx';
 
 const draftKey = (tableId) => `botanica_draft_mesa_${tableId}`;
 function loadDraft(tableId) {
   try {
     const raw = localStorage.getItem(draftKey(tableId));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed ? parsed : {};
+    return raw ? JSON.parse(raw) || {} : {};
   } catch { return {}; }
 }
 function saveDraft(tableId, draft) {
@@ -25,10 +35,29 @@ function saveDraft(tableId, draft) {
   } catch {}
 }
 
+const BATCH_STATUS_LABEL = {
+  paid: { pill: '💰 Pagado · cocinando', cls: 'paid' },
+  ready: { pill: '✓ Listo para entregar', cls: 'ready' },
+  delivered: { pill: '🍽 Entregado', cls: 'delivered' },
+  cancelled: { pill: '× Cancelado', cls: 'cancelled' },
+};
+
+// El status visible del batch: si todos sus items están ready → ready.
+// Si batch.delivered_at, override.
+function effectiveBatchStatus(batch, items) {
+  if (batch.status === 'delivered') return 'delivered';
+  if (batch.status === 'cancelled') return 'cancelled';
+  // batch.status === 'paid' → mirar items
+  if (!items.length) return 'paid';
+  const allReady = items.every((it) => it.status === 'ready' || it.status === 'cancelled');
+  return allReady ? 'ready' : 'paid';
+}
+
 export function MeseroTableDetail() {
   const { tableId } = useParams();
   const navigate = useNavigate();
   const session = getSession();
+  const toast = useToast();
   const { tables } = useTables();
   const { orders, refresh } = useOpenOrders(`mesero-table-${tableId}`);
 
@@ -40,19 +69,15 @@ export function MeseroTableDetail() {
 
   const [orderId, setOrderId] = useState(order?.id ?? null);
   const [opening, setOpening] = useState(false);
-  // Draft persistido por mesa en localStorage — sobrevive recargas / pérdida de wifi.
   const [draft, setDraft] = useState(() => loadDraft(tableId));
-  const [sending, setSending] = useState(false);
+  const [paySheetOpen, setPaySheetOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [payOpen, setPayOpen] = useState(false);
-  const [paidToast, setPaidToast] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
 
-  // Persiste draft en cada cambio.
   useEffect(() => { saveDraft(tableId, draft); }, [tableId, draft]);
 
-  // Asegura una orden abierta apenas entramos a la mesa.
+  // Asegura una orden abierta apenas entramos.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -60,100 +85,144 @@ export function MeseroTableDetail() {
       try {
         setOpening(true);
         const o = await getOrCreateOpenOrder(Number(tableId), session.server);
-        if (!cancelled) {
-          setOrderId(o.id);
-          refresh();
-        }
+        if (!cancelled) { setOrderId(o.id); refresh(); }
       } catch (e) {
-        if (!cancelled) setError(e.message ?? String(e));
-      } finally {
-        if (!cancelled) setOpening(false);
-      }
+        if (!cancelled) { setError(e.message ?? String(e)); toast.error('No pude abrir la mesa'); }
+      } finally { if (!cancelled) setOpening(false); }
     })();
     return () => { cancelled = true; };
-  }, [tableId, session?.server, refresh]);
+  }, [tableId, session?.server, refresh, toast]);
 
+  // Construir batches con sus items.
+  const batches = useMemo(() => {
+    if (!order) return [];
+    const itemsByBatch = new Map();
+    for (const it of order.items ?? []) {
+      if (!itemsByBatch.has(it.batch_id)) itemsByBatch.set(it.batch_id, []);
+      itemsByBatch.get(it.batch_id).push(it);
+    }
+    const list = (order.batches ?? []).map((b) => {
+      const items = itemsByBatch.get(b.id) ?? [];
+      return { ...b, items, effective: effectiveBatchStatus(b, items) };
+    });
+    list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return list;
+  }, [order]);
+
+  // Detección de batches que pasaron a "ready" para alertar al mesero dueño.
+  const prevReadyRef = useRef(new Set());
+  const seededRef = useRef(false);
+  useEffect(() => {
+    const myReadyBatchIds = new Set(
+      batches.filter((b) => b.effective === 'ready' && b.server_id === session?.server).map((b) => b.id)
+    );
+    if (!seededRef.current) {
+      // primer render: no notificar lo que ya estaba ready
+      seededRef.current = true;
+      prevReadyRef.current = myReadyBatchIds;
+      return;
+    }
+    const newReady = [...myReadyBatchIds].filter((id) => !prevReadyRef.current.has(id));
+    if (newReady.length > 0) {
+      playBeep('delivered');
+      newReady.forEach(() => {
+        toast.ready(`Mesa ${tableId} · tanda lista para entregar`, {
+          icon: '🍽️',
+          title: 'Pedido listo',
+        });
+      });
+    }
+    prevReadyRef.current = myReadyBatchIds;
+  }, [batches, session?.server, tableId, toast]);
+
+  // ── Draft helpers ─────────────────────────────────────────────────
   const draftItems = Object.values(draft);
   const draftTotal = draftItems.reduce((s, { product, qty }) => s + Number(product.price) * qty, 0);
-
-  const sentItems = order?.items ?? [];
-  const sentTotal = sentItems.reduce(
-    (s, it) => s + Number(it.unit_price_snapshot) * it.qty, 0
-  );
-
-  // Agrupa items enviados por batch_id para mostrarlos como "tandas".
-  const batches = useMemo(() => {
-    const map = new Map();
-    for (const it of sentItems) {
-      if (!map.has(it.batch_id)) {
-        map.set(it.batch_id, {
-          id: it.batch_id, items: [], sent_at: it.sent_at,
-          status: it.status, server_id: it.server_id,
-        });
-      }
-      const b = map.get(it.batch_id);
-      b.items.push(it);
-      // status del batch = el "menos avanzado" de sus items.
-      if (it.status === 'pending') b.status = 'pending';
-      else if (it.status === 'ready' && b.status !== 'pending') b.status = 'ready';
-    }
-    return Array.from(map.values()).sort(
-      (a, b) => new Date(a.sent_at) - new Date(b.sent_at)
-    );
-  }, [sentItems]);
+  const draftCount = draftItems.reduce((s, it) => s + it.qty, 0);
 
   const addToDraft = useCallback((product) => {
-    setDraft((d) => ({
-      ...d,
-      [product.id]: { product, qty: (d[product.id]?.qty ?? 0) + 1 },
-    }));
+    setDraft((d) => ({ ...d, [product.id]: { product, qty: (d[product.id]?.qty ?? 0) + 1 } }));
   }, []);
   const decFromDraft = useCallback((product) => {
     setDraft((d) => {
       const cur = d[product.id]?.qty ?? 0;
-      if (cur <= 1) { const next = { ...d }; delete next[product.id]; return next; }
+      if (cur <= 1) { const n = { ...d }; delete n[product.id]; return n; }
       return { ...d, [product.id]: { product, qty: cur - 1 } };
     });
   }, []);
 
-  const sendBatch = async () => {
+  // ── Acciones ───────────────────────────────────────────────────────
+  const onConfirmPayment = async ({ method, received_amount }) => {
     if (!orderId || !draftItems.length) return;
     try {
-      setSending(true);
+      setSubmitting(true);
       setError(null);
-      await addItemsToOrder(orderId, draftItems, session.server);
+      await sendBatchPaid({
+        orderId,
+        items: draftItems,
+        serverId: session.server,
+        payment: { method, received_amount },
+      });
       setDraft({});
-      saveDraft(tableId, {}); // limpieza explícita inmediata
+      saveDraft(tableId, {});
+      setPaySheetOpen(false);
+      toast.success(`Tanda enviada a cocina · ${money(draftTotal)} Bs cobrados`, { icon: '✓' });
       refresh();
     } catch (e) {
       setError(e.message ?? String(e));
-    } finally {
-      setSending(false);
+      toast.error(`Error al enviar: ${e.message ?? e}`);
+    } finally { setSubmitting(false); }
+  };
+
+  const onMarkDelivered = async (batch) => {
+    try {
+      await markBatchDelivered(batch.id);
+      toast.success('Entregado', { icon: '🍽', duration: 2500 });
+      refresh();
+      // Si era el último batch activo, auto-cerrar la mesa.
+      const remaining = batches.filter(
+        (b) => b.id !== batch.id && b.status !== 'delivered' && b.status !== 'cancelled'
+      );
+      if (remaining.length === 0 && orderId) {
+        await closeOrder(orderId);
+        toast.info(`${table?.name ?? `Mesa ${tableId}`} cerrada`);
+        navigate('/caja/mesero', { replace: true });
+      }
+    } catch (e) {
+      toast.error(`No se pudo marcar entregado: ${e.message ?? e}`);
+    }
+  };
+
+  const onCancelBatch = async (batch) => {
+    if (!confirm(`¿Cancelar esta tanda? (${batch.items.length} items, ${money(batch.total)} Bs)`)) return;
+    try {
+      await cancelBatch(batch.id);
+      toast.info('Tanda cancelada');
+      refresh();
+    } catch (e) {
+      toast.error(`Error: ${e.message ?? e}`);
     }
   };
 
   const doCancelOrder = async () => {
     if (!orderId) return;
     try {
-      setCancelling(true);
       await cancelOrder(orderId);
       saveDraft(tableId, {});
+      toast.info(`${table?.name ?? `Mesa ${tableId}`} cancelada`);
       navigate('/caja/mesero', { replace: true });
-    } catch (e) {
-      setError(e.message ?? String(e));
-      setCancelling(false);
-      setConfirmCancel(false);
-    }
-  };
-
-  const onPaid = ({ total, method }) => {
-    setPayOpen(false);
-    setPaidToast({ total, method });
-    setTimeout(() => { setPaidToast(null); navigate('/caja/mesero'); }, 1500);
+    } catch (e) { toast.error(`Error: ${e.message ?? e}`); setConfirmCancel(false); }
   };
 
   if (!session) return null;
-  if (opening && !orderId) return <div className="caja-empty">Abriendo cuenta de {table?.name ?? `mesa ${tableId}`}…</div>;
+  if (opening && !orderId) {
+    return <div className="caja-empty">Abriendo cuenta de {table?.name ?? `mesa ${tableId}`}…</div>;
+  }
+
+  const sentItemsCount = (order?.items ?? []).filter((it) => it.status !== 'cancelled').length;
+  const accumulatedTotal = batches
+    .filter((b) => b.status !== 'cancelled')
+    .reduce((s, b) => s + Number(b.total), 0);
 
   const scrollToPicker = () => {
     document.querySelector('.picker-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -162,74 +231,58 @@ export function MeseroTableDetail() {
   return (
     <div className="mesa-detail">
       <header className="mesa-detail-head">
-        <button className="cobro-back" onClick={() => navigate('/caja/mesero')} aria-label="Volver">
-          ←
-        </button>
+        <button className="cobro-back" onClick={() => navigate('/caja/mesero')} aria-label="Volver">←</button>
         <div className="mesa-detail-title">
           <strong>{table?.name ?? `Mesa ${tableId}`}</strong>
-          <span>{sentItems.length} ítems enviados</span>
+          <span>{sentItemsCount} ítems · {money(accumulatedTotal)} Bs cobrados</span>
         </div>
         {orderId && (
           <button className="mesa-detail-cancel" onClick={() => setConfirmCancel(true)}
-                  aria-label="Cancelar mesa completa" title="Cancelar mesa completa">
-            ✕
-          </button>
+                  aria-label="Cancelar mesa completa" title="Cancelar mesa completa">✕</button>
         )}
       </header>
 
       {batches.length > 0 && (
         <section className="batches">
-          <h3 className="caja-h3">Enviado a cocina</h3>
-          {batches.map((b) => (
-            <div key={b.id} className={`batch batch-${b.status}`}>
-              <div className="batch-head">
-                <span className="batch-time">{formatTime(b.sent_at)} · hace {minutesSince(b.sent_at)} min</span>
-                <span className={`batch-pill ${b.status}`}>
-                  {b.status === 'pending' ? '⏳ En cocina'
-                    : b.status === 'ready'  ? '✓ Listo'
-                    : '× Cancelado'}
-                </span>
-              </div>
-              <ul className="batch-items">
-                {b.items.map((it) => {
-                  const editable = it.status === 'pending';
-                  return (
+          <h3 className="caja-h3">Tandas</h3>
+          {batches.map((b) => {
+            const eff = b.effective;
+            const meta = BATCH_STATUS_LABEL[eff] ?? BATCH_STATUS_LABEL.paid;
+            const mine = b.server_id === session.server;
+            return (
+              <div key={b.id} className={`batch batch-${meta.cls} ${mine && eff === 'ready' ? 'batch--mine-ready' : ''}`}>
+                <div className="batch-head">
+                  <span className="batch-time">
+                    {formatTime(b.paid_at)} · hace {minutesSince(b.paid_at)} min · {money(b.total)} Bs · {b.payment_method}
+                  </span>
+                  <span className={`batch-pill ${meta.cls}`}>{meta.pill}</span>
+                </div>
+                <ul className="batch-items">
+                  {b.items.map((it) => (
                     <li key={it.id} className={`batch-item batch-item--${it.status}`}>
                       <div className="batch-item-main">
                         <span className="batch-item-name">
-                          <span className="batch-item-qty">{it.qty}×</span>
-                          {it.product_name_snapshot}
+                          <span className="batch-item-qty">{it.qty}×</span>{it.product_name_snapshot}
                         </span>
                         <span className="batch-item-price">{money(it.unit_price_snapshot * it.qty)} Bs</span>
                       </div>
-                      {editable && (
-                        <div className="batch-item-actions">
-                          <button className="ic-btn" onClick={async () => {
-                            if (it.qty <= 1) { await removeItem(it.id); }
-                            else { await updateItemQty(it.id, it.qty - 1); }
-                            refresh();
-                          }} aria-label="Quitar uno">−</button>
-                          <button className="ic-btn" onClick={async () => {
-                            await updateItemQty(it.id, it.qty + 1);
-                            refresh();
-                          }} aria-label="Sumar uno">+</button>
-                          <button className="ic-btn ic-btn--danger" onClick={async () => {
-                            await removeItem(it.id);
-                            refresh();
-                          }} aria-label="Eliminar item">✕</button>
-                        </div>
-                      )}
                     </li>
-                  );
-                })}
-              </ul>
-              {b.status === 'pending' && (
-                <button className="batch-cancel" onClick={() => cancelBatch(b.id).then(refresh)}>
-                  Cancelar tanda completa
-                </button>
-              )}
-            </div>
-          ))}
+                  ))}
+                </ul>
+                {eff === 'ready' && (
+                  <button className="btn-gold btn-gold--block batch-deliver"
+                          onClick={() => onMarkDelivered(b)}>
+                    🍽 Marcar entregado
+                  </button>
+                )}
+                {eff === 'paid' && (
+                  <button className="batch-cancel" onClick={() => onCancelBatch(b)}>
+                    Cancelar tanda
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </section>
       )}
 
@@ -247,67 +300,38 @@ export function MeseroTableDetail() {
           <div className="draft-info">
             <span>Tanda nueva</span>
             <strong>{money(draftTotal)} <small>Bs</small></strong>
-            <small>{draftItems.reduce((s, it) => s + it.qty, 0)} ítems</small>
+            <small>{draftCount} ítems</small>
           </div>
-          <button className="btn-cobrar" disabled={sending} onClick={sendBatch}>
-            {sending ? 'Enviando…' : 'Enviar a cocina'}
+          <button className="btn-cobrar" disabled={submitting} onClick={() => setPaySheetOpen(true)}>
+            Cobrar y enviar
           </button>
         </section>
       )}
 
       {error && <p className="caja-error">{error}</p>}
 
-      <section className="total-bar">
-        <div className="total-info">
-          <span>Total acumulado</span>
-          <strong>{money(sentTotal)} <small>Bs</small></strong>
-        </div>
-        <button className="btn-cobrar" disabled={sentTotal === 0} onClick={() => setPayOpen(true)}>
-          Cobrar
-        </button>
-      </section>
-
-      {payOpen && order && (
+      {paySheetOpen && (
         <PaymentSheet
-          order={order}
-          total={sentTotal}
-          onClose={() => setPayOpen(false)}
-          onPaid={onPaid}
+          total={draftTotal}
+          onClose={() => !submitting && setPaySheetOpen(false)}
+          onConfirm={onConfirmPayment}
+          submitting={submitting}
+          contextLabel={`${table?.name ?? `Mesa ${tableId}`} · ${draftCount} ítems`}
         />
       )}
 
-      {paidToast && (
-        <div className="sheet-scrim">
-          <div className="pay-sheet success">
-            <div className="check-ring">
-              <svg viewBox="0 0 52 52" width="64" height="64">
-                <circle cx="26" cy="26" r="24" fill="none" stroke="var(--gold)" strokeWidth="2" />
-                <path d="M16 27l7 7 13-14" fill="none" stroke="var(--gold)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <h3 className="sheet-title">¡Cobro registrado!</h3>
-            <p className="sheet-sub">{table?.name} · {money(paidToast.total)} Bs · {paidToast.method}</p>
-          </div>
-        </div>
-      )}
-
       {confirmCancel && (
-        <div className="sheet-scrim" onClick={() => !cancelling && setConfirmCancel(false)}>
+        <div className="sheet-scrim" onClick={() => setConfirmCancel(false)}>
           <div className="pay-sheet confirm-sheet danger-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-grip" />
             <h3 className="sheet-title">¿Cancelar la mesa completa?</h3>
             <p className="sheet-sub">
-              <strong>{table?.name}</strong> — se cancelan todos los items.
-              {sentItems.length > 0 && <><br/>Items ya enviados a cocina: <strong>{sentItems.length}</strong>.</>}
+              <strong>{table?.name}</strong> — se cancelan todas las tandas pendientes.
             </p>
             <p className="confirm-warn">⚠ Esta acción no se puede deshacer.</p>
             <div className="confirm-actions">
-              <button className="btn-ghost" onClick={() => setConfirmCancel(false)} disabled={cancelling}>
-                Volver
-              </button>
-              <button className="btn-danger" onClick={doCancelOrder} disabled={cancelling}>
-                {cancelling ? 'Cancelando…' : 'Sí, cancelar mesa'}
-              </button>
+              <button className="btn-ghost" onClick={() => setConfirmCancel(false)}>Volver</button>
+              <button className="btn-danger" onClick={doCancelOrder}>Sí, cancelar mesa</button>
             </div>
           </div>
         </div>

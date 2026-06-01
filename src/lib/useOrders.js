@@ -1,5 +1,4 @@
-// useOrders.js — órdenes abiertas + suscripción realtime.
-// Refetch completo en cada evento; suficiente para 2-3 usuarios concurrentes.
+// useOrders.js — órdenes abiertas con sus batches + items, en tiempo real.
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchOpenOrders } from './orderApi.js';
@@ -29,6 +28,7 @@ export function useOpenOrders(channelName = 'orders-default') {
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => refresh())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_batches' }, () => refresh())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => refresh())
       .subscribe();
 

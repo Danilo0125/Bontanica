@@ -8,10 +8,11 @@ import { MeseroView } from './components/caja/MeseroView.jsx';
 import { MeseroTableDetail } from './components/caja/MeseroTableDetail.jsx';
 import { CocinaView } from './components/caja/CocinaView.jsx';
 import { AdminDashboard } from './components/caja/AdminDashboard.jsx';
+import { ToastProvider } from './components/caja/Toasts.jsx';
 
 export function App() {
   return (
-    <BrowserRouter>
+    <ToastProvider><BrowserRouter>
       <Routes>
         <Route path="/" element={<PublicLayout />} />
         <Route path="/caja" element={<CajaGate />} />
@@ -29,6 +30,6 @@ export function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </BrowserRouter></ToastProvider>
   );
 }

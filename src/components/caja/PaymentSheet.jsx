@@ -1,13 +1,11 @@
-// PaymentSheet.jsx — bottom-sheet de cobro (efectivo / QR).
+// PaymentSheet.jsx — bottom-sheet de cobro. Reusable: emite onConfirm con
+// { method, received_amount } y deja que el caller haga la persistencia.
 import { useEffect, useState } from 'react';
 import { money } from '../../lib/format.js';
-import { payOrder } from '../../lib/orderApi.js';
 
-// Si el archivo /assets/qr-pago.png existe, lo usamos. Si no, mostramos
-// el banner "QR pendiente" y aceptamos el pago como manual.
 const QR_PATH = '/assets/qr-pago.png';
 function useQrAvailability() {
-  const [available, setAvailable] = useState(null); // null=checking | true | false
+  const [available, setAvailable] = useState(null);
   useEffect(() => {
     const img = new Image();
     img.onload = () => setAvailable(true);
@@ -17,40 +15,29 @@ function useQrAvailability() {
   return available;
 }
 
-export function PaymentSheet({ order, total, onClose, onPaid }) {
+export function PaymentSheet({ total, onClose, onConfirm, submitting = false, contextLabel }) {
   const [step, setStep] = useState('choose'); // 'choose' | 'efectivo' | 'qr'
   const [received, setReceived] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
   const qrAvailable = useQrAvailability();
 
   const change = step === 'efectivo' && received !== '' ? Number(received) - total : null;
 
-  const finish = async (method) => {
-    try {
-      setSubmitting(true);
-      setError(null);
-      await payOrder(order.id, {
-        method,
-        received: method === 'efectivo' ? Number(received) : null,
-        total,
-      });
-      onPaid({ method, total });
-    } catch (e) {
-      setError(e.message ?? String(e));
-    } finally {
-      setSubmitting(false);
-    }
+  const confirm = (method) => {
+    if (submitting) return;
+    onConfirm({
+      method,
+      received_amount: method === 'efectivo' ? Number(received) : null,
+    });
   };
 
   return (
-    <div className="sheet-scrim" onClick={onClose}>
+    <div className="sheet-scrim" onClick={() => !submitting && onClose()}>
       <div className="pay-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-grip" />
         {step === 'choose' && (
           <>
             <h3 className="sheet-title">Cobrar {money(total)} Bs</h3>
-            <p className="sheet-sub">Selecciona el método de pago</p>
+            {contextLabel && <p className="sheet-sub">{contextLabel}</p>}
             <div className="pay-methods">
               <button className="pay-opt" onClick={() => setStep('efectivo')}>
                 <span className="pay-ico">💵</span><span>Efectivo</span>
@@ -64,7 +51,7 @@ export function PaymentSheet({ order, total, onClose, onPaid }) {
         {step === 'efectivo' && (
           <>
             <h3 className="sheet-title">Efectivo</h3>
-            <p className="sheet-sub">Total a cobrar: <strong>{money(total)} Bs</strong></p>
+            <p className="sheet-sub">Total: <strong>{money(total)} Bs</strong></p>
             <label className="field">
               <span>¿Con cuánto paga?</span>
               <input type="number" inputMode="numeric" value={received}
@@ -82,10 +69,9 @@ export function PaymentSheet({ order, total, onClose, onPaid }) {
                   <button key={v} onClick={() => setReceived(String(v))}>{money(v)}</button>
                 ))}
             </div>
-            {error && <p className="caja-error">{error}</p>}
             <button className="btn-gold btn-gold--block"
                     disabled={received === '' || Number(received) < total || submitting}
-                    onClick={() => finish('efectivo')}>
+                    onClick={() => confirm('efectivo')}>
               {submitting ? 'Cobrando…' : 'Confirmar cobro'}
             </button>
           </>
@@ -106,15 +92,14 @@ export function PaymentSheet({ order, total, onClose, onPaid }) {
                 <div className="qr-pending">
                   <span className="qr-pending-icon" aria-hidden="true">⚠️</span>
                   <strong>QR aún no configurado</strong>
-                  <p>Cobrá manualmente (efectivo o transferencia directa) y confirmá abajo.<br/>
-                  <small>Cuando tengas el QR del banco, guardalo como <code>public/assets/qr-pago.png</code>.</small></p>
+                  <p>Mostrá el QR impreso del banco y verificá el comprobante.<br/>
+                  <small>Para automatizarlo: guardar PNG en <code>public/assets/qr-pago.png</code>.</small></p>
                 </div>
               )}
             </div>
-            {error && <p className="caja-error">{error}</p>}
             <button className="btn-gold btn-gold--block" disabled={submitting}
-                    onClick={() => finish('qr')}>
-              {submitting ? 'Cobrando…' : 'Marcar como pagado'}
+                    onClick={() => confirm('qr')}>
+              {submitting ? 'Cobrando…' : 'Confirmé el cobro'}
             </button>
           </>
         )}
