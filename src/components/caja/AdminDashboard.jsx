@@ -1,16 +1,16 @@
-// AdminDashboard.jsx — vista del dueño con métricas en vivo.
-// Vive en /admin (protegida por la misma sesión de caja).
+// AdminDashboard.jsx — pestaña Resumen dentro de /caja/admin.
+// Paleta clara (admin.css). Hereda métricas de useAdminStats.
 import { useAdminStats } from '../../lib/useAdminStats.js';
 import { money, formatTime } from '../../lib/format.js';
 
 const METHOD_LABEL = { efectivo: 'Efectivo', qr: 'QR / Transferencia' };
 
-function Card({ label, value, unit, tone = 'neutral', sub }) {
+function Stat({ label, value, unit, sub }) {
   return (
-    <div className={`stat-card stat-${tone}`}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}{unit && <small>{unit}</small>}</div>
-      {sub && <div className="stat-sub">{sub}</div>}
+    <div className="admin-stat">
+      <div className="admin-stat-label">{label}</div>
+      <div className="admin-stat-value">{value}{unit && <small>{unit}</small>}</div>
+      {sub && <div className="admin-stat-sub">{sub}</div>}
     </div>
   );
 }
@@ -19,10 +19,10 @@ export function AdminDashboard() {
   const { stats, loading, error } = useAdminStats();
 
   if (error) {
-    return <div className="caja-empty"><p>Error cargando métricas.</p><pre className="caja-error">{error.message}</pre></div>;
+    return <p className="admin-empty">Error: {error.message}</p>;
   }
   if (loading || !stats) {
-    return <div className="caja-empty">Cargando dashboard…</div>;
+    return <p className="admin-empty">Cargando…</p>;
   }
 
   const occupancyPct = stats.totalTables > 0
@@ -30,91 +30,76 @@ export function AdminDashboard() {
     : 0;
 
   return (
-    <div className="admin-view">
-      <h2 className="caja-h2">
-        Resumen del día
-        <span className="caja-h2-meta">actualiza en vivo · {formatTime(stats.updatedAt)}</span>
-      </h2>
+    <>
+      <h1 className="admin-h1">Resumen del día</h1>
+      <p className="admin-sub">Actualiza en vivo · última lectura {formatTime(stats.updatedAt)}</p>
 
-      <div className="stats-grid">
-        <Card
-          label="Facturación hoy"
-          tone="gold"
-          value={money(stats.revenueToday)}
-          unit=" Bs"
-          sub={`${stats.ordersPaidCount} cobro${stats.ordersPaidCount === 1 ? '' : 's'} · ticket prom ${money(Math.round(stats.avgTicket))} Bs`}
-        />
-        <Card
-          label="Mesas activas"
-          tone={stats.tablesOccupied > 0 ? 'ok' : 'neutral'}
-          value={stats.tablesOccupied}
-          unit={` / ${stats.totalTables}`}
-          sub={`${occupancyPct}% ocupación · ${money(stats.openValue)} Bs sin cobrar`}
-        />
-        <Card
-          label="Cocina · tiempo medio"
-          tone={stats.avgKitchenMin === null ? 'neutral'
-            : stats.avgKitchenMin >= 10 ? 'crit'
-            : stats.avgKitchenMin >= 5 ? 'warn' : 'ok'}
-          value={stats.avgKitchenMin === null ? '—' : stats.avgKitchenMin.toFixed(1)}
-          unit=" min"
-          sub="desde envío a listo"
-        />
+      <div className="admin-stats">
+        <Stat label="Facturación hoy" value={money(stats.revenueToday)} unit=" Bs"
+              sub={`${stats.ordersPaidCount} cobro${stats.ordersPaidCount === 1 ? '' : 's'} · ticket prom ${money(Math.round(stats.avgTicket))} Bs`} />
+        <Stat label="Mesas activas" value={stats.tablesOccupied}
+              unit={` / ${stats.totalTables}`}
+              sub={`${occupancyPct}% ocupación · ${money(stats.openValue)} Bs en piso`} />
+        <Stat label="Tiempo medio de entrega"
+              value={stats.avgKitchenMin === null ? '—' : stats.avgKitchenMin.toFixed(1)} unit=" min"
+              sub="desde cobro hasta entregar" />
       </div>
 
-      <section className="admin-section">
-        <h3 className="caja-h3">Cobros por método</h3>
-        <div className="method-bars">
-          {Object.keys(stats.byMethod).length === 0 && (
-            <p className="muted-note">Sin cobros todavía hoy.</p>
-          )}
-          {Object.entries(stats.byMethod).map(([m, total]) => {
-            const pct = stats.revenueToday > 0 ? (total / stats.revenueToday) * 100 : 0;
-            return (
-              <div key={m} className="method-bar">
-                <div className="method-bar-head">
-                  <span>{METHOD_LABEL[m] ?? m}</span>
-                  <span className="method-bar-amt">{money(total)} Bs · {pct.toFixed(0)}%</span>
+      <h2 className="admin-h2">Cobros por método</h2>
+      {Object.keys(stats.byMethod).length === 0
+        ? <p className="admin-empty">Sin cobros todavía hoy.</p>
+        : (
+          <div className="admin-table-wrap" style={{ padding: '14px 18px' }}>
+            {Object.entries(stats.byMethod).map(([m, t]) => {
+              const pct = stats.revenueToday > 0 ? (t / stats.revenueToday) * 100 : 0;
+              return (
+                <div key={m} style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span>{METHOD_LABEL[m] ?? m}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(t)} Bs · {pct.toFixed(0)}%</span>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--a-line-soft)', borderRadius: 999, marginTop: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--a-accent)', borderRadius: 999, transition: 'width .4s' }} />
+                  </div>
                 </div>
-                <div className="method-bar-track">
-                  <div className="method-bar-fill" style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="admin-section">
-        <h3 className="caja-h3">Top productos del día</h3>
-        {stats.topProducts.length === 0 ? (
-          <p className="muted-note">Aún no hay productos vendidos.</p>
-        ) : (
-          <ol className="top-products">
-            {stats.topProducts.map((p, i) => (
-              <li key={p.name}>
-                <span className="rank">#{i + 1}</span>
-                <span className="top-name">{p.name}</span>
-                <span className="top-qty">{p.qty}× </span>
-                <span className="top-rev">{money(p.revenue)} Bs</span>
-              </li>
-            ))}
-          </ol>
+              );
+            })}
+          </div>
         )}
-      </section>
+
+      <h2 className="admin-h2">Top productos del día</h2>
+      {stats.topProducts.length === 0
+        ? <p className="admin-empty">Aún no hay productos vendidos.</p>
+        : (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead><tr><th>#</th><th>Producto</th><th className="admin-cell-num">Cant.</th><th className="admin-cell-num">Revenue</th></tr></thead>
+              <tbody>
+                {stats.topProducts.map((p, i) => (
+                  <tr key={p.name}>
+                    <td>{i + 1}</td>
+                    <td>{p.name}</td>
+                    <td className="admin-cell-num">{p.qty}</td>
+                    <td className="admin-cell-num">{money(p.revenue)} Bs</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
       {stats.alerts.length > 0 && (
-        <section className="admin-section">
-          <h3 className="caja-h3 alert">⚠ Alertas</h3>
-          <ul className="admin-alerts">
+        <>
+          <h2 className="admin-h2" style={{ color: 'var(--a-crit)' }}>⚠ Alertas</h2>
+          <div className="admin-table-wrap" style={{ padding: 14 }}>
             {stats.alerts.map((a) => (
-              <li key={a.table_id}>
-                Mesa {a.table_id} abierta hace más de 3 horas · {formatTime(a.opened_at)}
-              </li>
+              <p key={a.table_id} style={{ margin: '6px 0', color: 'var(--a-crit)' }}>
+                Mesa {a.table_id} abierta hace más de 3 horas (desde {formatTime(a.opened_at)})
+              </p>
             ))}
-          </ul>
-        </section>
+          </div>
+        </>
       )}
-    </div>
+    </>
   );
 }
