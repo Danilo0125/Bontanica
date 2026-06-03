@@ -1,5 +1,6 @@
 // Sections.jsx — About, Galería, Ubicación, Reservas, Footer
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { VENUE } from '../data/data.js';
 import { Reveal, SectionTitle } from './ui.jsx';
 
@@ -164,6 +165,7 @@ export function SocialFooter() {
         </a>
       </div>
       <p className="footer-credit">© {year} Botánica RestoBar · Hecho con cariño bajo las luces 🌿</p>
+      <Link to="/caja" className="footer-staff">Personal · Caja</Link>
     </footer>
   );
 }

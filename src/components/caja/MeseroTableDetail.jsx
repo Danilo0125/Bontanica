@@ -1,11 +1,5 @@
 // MeseroTableDetail.jsx — vista de una mesa con cobro pre-pago por tanda.
-//
-// Flujo:
-//   1. Draft local (no DB todavía)
-//   2. "Enviar a cocina" → abre PaymentSheet → confirmar cobro → crea batch (paid) + items (pending)
-//   3. Cocina marca items → batch lo ve como ready → mesero recibe toast + sonido
-//   4. Mesero toca "Marcar entregado" → batch.status='delivered'
-//   5. Cuando ningún batch queda en paid (todos delivered/cancelled) → mesa auto-cierra
+// Tema blanco minimal. Toda la lógica existente se mantiene.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTables } from '../../lib/useTables.js';
@@ -36,18 +30,15 @@ function saveDraft(tableId, draft) {
 }
 
 const BATCH_STATUS_LABEL = {
-  paid: { pill: '💰 Pagado · cocinando', cls: 'paid' },
-  ready: { pill: '✓ Listo para entregar', cls: 'ready' },
-  delivered: { pill: '🍽 Entregado', cls: 'delivered' },
-  cancelled: { pill: '× Cancelado', cls: 'cancelled' },
+  paid:      { pill: 'Pagado · cocinando', cls: 'paid' },
+  ready:     { pill: '✓ Listo para entregar', cls: 'ready' },
+  delivered: { pill: 'Entregado', cls: 'delivered' },
+  cancelled: { pill: 'Cancelado', cls: 'cancelled' },
 };
 
-// El status visible del batch: si todos sus items están ready → ready.
-// Si batch.delivered_at, override.
 function effectiveBatchStatus(batch, items) {
   if (batch.status === 'delivered') return 'delivered';
   if (batch.status === 'cancelled') return 'cancelled';
-  // batch.status === 'paid' → mirar items
   if (!items.length) return 'paid';
   const allReady = items.every((it) => it.status === 'ready' || it.status === 'cancelled');
   return allReady ? 'ready' : 'paid';
@@ -77,7 +68,6 @@ export function MeseroTableDetail() {
 
   useEffect(() => { saveDraft(tableId, draft); }, [tableId, draft]);
 
-  // Asegura una orden abierta apenas entramos.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -93,7 +83,6 @@ export function MeseroTableDetail() {
     return () => { cancelled = true; };
   }, [tableId, session?.server, refresh, toast]);
 
-  // Construir batches con sus items.
   const batches = useMemo(() => {
     if (!order) return [];
     const itemsByBatch = new Map();
@@ -109,7 +98,6 @@ export function MeseroTableDetail() {
     return list;
   }, [order]);
 
-  // Detección de batches que pasaron a "ready" para alertar al mesero dueño.
   const prevReadyRef = useRef(new Set());
   const seededRef = useRef(false);
   useEffect(() => {
@@ -117,7 +105,6 @@ export function MeseroTableDetail() {
       batches.filter((b) => b.effective === 'ready' && b.server_id === session?.server).map((b) => b.id)
     );
     if (!seededRef.current) {
-      // primer render: no notificar lo que ya estaba ready
       seededRef.current = true;
       prevReadyRef.current = myReadyBatchIds;
       return;
@@ -135,7 +122,6 @@ export function MeseroTableDetail() {
     prevReadyRef.current = myReadyBatchIds;
   }, [batches, session?.server, tableId, toast]);
 
-  // ── Draft helpers ─────────────────────────────────────────────────
   const draftItems = Object.values(draft);
   const draftTotal = draftItems.reduce((s, { product, qty }) => s + Number(product.price) * qty, 0);
   const draftCount = draftItems.reduce((s, it) => s + it.qty, 0);
@@ -151,7 +137,6 @@ export function MeseroTableDetail() {
     });
   }, []);
 
-  // ── Acciones ───────────────────────────────────────────────────────
   const onConfirmPayment = async ({ method, received_amount }) => {
     if (!orderId || !draftItems.length) return;
     try {
@@ -179,7 +164,6 @@ export function MeseroTableDetail() {
       await markBatchDelivered(batch.id);
       toast.success('Entregado', { icon: '🍽', duration: 2500 });
       refresh();
-      // Si era el último batch activo, auto-cerrar la mesa.
       const remaining = batches.filter(
         (b) => b.id !== batch.id && b.status !== 'delivered' && b.status !== 'cancelled'
       );
@@ -216,7 +200,7 @@ export function MeseroTableDetail() {
 
   if (!session) return null;
   if (opening && !orderId) {
-    return <div className="caja-empty">Abriendo cuenta de {table?.name ?? `mesa ${tableId}`}…</div>;
+    return <div className="s-empty">Abriendo cuenta de {table?.name ?? `mesa ${tableId}`}…</div>;
   }
 
   const sentItemsCount = (order?.items ?? []).filter((it) => it.status !== 'cancelled').length;
@@ -224,54 +208,46 @@ export function MeseroTableDetail() {
     .filter((b) => b.status !== 'cancelled')
     .reduce((s, b) => s + Number(b.total), 0);
 
-  const scrollToPicker = () => {
-    document.querySelector('.picker-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   return (
     <div className="mesa-detail">
       <header className="mesa-detail-head">
-        <button className="cobro-back" onClick={() => navigate('/caja/mesero')} aria-label="Volver">←</button>
+        <button className="detail-back" onClick={() => navigate('/caja/mesero')} aria-label="Volver">←</button>
         <div className="mesa-detail-title">
-          <strong>{table?.name ?? `Mesa ${tableId}`}</strong>
-          <span>{sentItemsCount} ítems · {money(accumulatedTotal)} Bs cobrados</span>
+          <b>{table?.name ?? `Mesa ${tableId}`}</b>
+          <span>{sentItemsCount} ítems enviados · {money(accumulatedTotal)} Bs cobrados</span>
         </div>
         {orderId && (
-          <button className="mesa-detail-cancel" onClick={() => setConfirmCancel(true)}
+          <button className="detail-cancel" onClick={() => setConfirmCancel(true)}
                   aria-label="Cancelar mesa completa" title="Cancelar mesa completa">✕</button>
         )}
       </header>
 
       {batches.length > 0 && (
-        <section className="batches">
-          <h3 className="caja-h3">Tandas</h3>
+        <section>
+          <h2 className="s-h2">Tandas</h2>
           {batches.map((b) => {
             const eff = b.effective;
             const meta = BATCH_STATUS_LABEL[eff] ?? BATCH_STATUS_LABEL.paid;
-            const mine = b.server_id === session.server;
             return (
-              <div key={b.id} className={`batch batch-${meta.cls} ${mine && eff === 'ready' ? 'batch--mine-ready' : ''}`}>
+              <div key={b.id} className={`batch batch--${meta.cls}`}>
                 <div className="batch-head">
                   <span className="batch-time">
-                    {formatTime(b.paid_at)} · hace {minutesSince(b.paid_at)} min · {money(b.total)} Bs · {b.payment_method}
+                    {formatTime(b.paid_at)} · {minutesSince(b.paid_at)}m · {money(b.total)} Bs · {b.payment_method === 'qr' ? 'QR' : 'Efectivo'}
                   </span>
                   <span className={`batch-pill ${meta.cls}`}>{meta.pill}</span>
                 </div>
                 <ul className="batch-items">
-                  {b.items.map((it) => (
-                    <li key={it.id} className={`batch-item batch-item--${it.status}`}>
-                      <div className="batch-item-main">
-                        <span className="batch-item-name">
-                          <span className="batch-item-qty">{it.qty}×</span>{it.product_name_snapshot}
-                        </span>
-                        <span className="batch-item-price">{money(it.unit_price_snapshot * it.qty)} Bs</span>
-                      </div>
+                  {b.items.filter((it) => it.status !== 'cancelled').map((it) => (
+                    <li key={it.id} className="batch-item">
+                      <span>
+                        <span className="batch-item-qty">{it.qty}×</span>{it.product_name_snapshot}
+                      </span>
+                      <span className="batch-item-price">{money(it.unit_price_snapshot * it.qty)} Bs</span>
                     </li>
                   ))}
                 </ul>
                 {eff === 'ready' && (
-                  <button className="btn-gold btn-gold--block batch-deliver"
-                          onClick={() => onMarkDelivered(b)}>
+                  <button className="btn-primary batch-deliver" onClick={() => onMarkDelivered(b)}>
                     🍽 Marcar entregado
                   </button>
                 )}
@@ -286,8 +262,8 @@ export function MeseroTableDetail() {
         </section>
       )}
 
-      <section className="picker-wrap">
-        <h3 className="caja-h3">Agregar a la cuenta</h3>
+      <section>
+        <h2 className="s-h2">Agregar a la cuenta</h2>
         <ProductPicker
           draft={Object.fromEntries(draftItems.map(({ product, qty }) => [product.id, qty]))}
           onAdd={addToDraft}
@@ -296,19 +272,19 @@ export function MeseroTableDetail() {
       </section>
 
       {draftItems.length > 0 && (
-        <section className="draft-bar">
+        <div className="draft-bar">
           <div className="draft-info">
             <span>Tanda nueva</span>
-            <strong>{money(draftTotal)} <small>Bs</small></strong>
+            <strong>{money(draftTotal)}<small> Bs</small></strong>
             <small>{draftCount} ítems</small>
           </div>
           <button className="btn-cobrar" disabled={submitting} onClick={() => setPaySheetOpen(true)}>
             Cobrar y enviar
           </button>
-        </section>
+        </div>
       )}
 
-      {error && <p className="caja-error">{error}</p>}
+      {error && <p style={{ color: 'var(--s-crit)', fontSize: 13 }}>{error}</p>}
 
       {paySheetOpen && (
         <PaymentSheet
@@ -321,25 +297,20 @@ export function MeseroTableDetail() {
       )}
 
       {confirmCancel && (
-        <div className="sheet-scrim" onClick={() => setConfirmCancel(false)}>
-          <div className="pay-sheet confirm-sheet danger-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-grip" />
-            <h3 className="sheet-title">¿Cancelar la mesa completa?</h3>
-            <p className="sheet-sub">
-              <strong>{table?.name}</strong> — se cancelan todas las tandas pendientes.
+        <div className="s-scrim" onClick={() => setConfirmCancel(false)}>
+          <div className="s-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="s-grip" />
+            <h3 className="s-title">¿Cancelar la mesa?</h3>
+            <p className="s-sheet-sub">
+              <strong>{table?.name}</strong> — se cancelan todas las tandas pendientes. Esta acción no se puede deshacer.
             </p>
-            <p className="confirm-warn">⚠ Esta acción no se puede deshacer.</p>
             <div className="confirm-actions">
               <button className="btn-ghost" onClick={() => setConfirmCancel(false)}>Volver</button>
-              <button className="btn-danger" onClick={doCancelOrder}>Sí, cancelar mesa</button>
+              <button className="btn-danger" onClick={doCancelOrder}>Sí, cancelar</button>
             </div>
           </div>
         </div>
       )}
-
-      <button className="fab-add" onClick={scrollToPicker} aria-label="Agregar producto">
-        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-      </button>
     </div>
   );
 }

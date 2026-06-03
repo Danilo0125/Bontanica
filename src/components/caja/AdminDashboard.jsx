@@ -1,5 +1,4 @@
-// AdminDashboard.jsx — pestaña Resumen dentro de /caja/admin.
-// Paleta clara (admin.css). Hereda métricas de useAdminStats.
+// AdminDashboard.jsx — pestaña Resumen dentro de /caja/admin. Tema blanco.
 import { useAdminStats } from '../../lib/useAdminStats.js';
 import { money, formatTime } from '../../lib/format.js';
 
@@ -7,10 +6,10 @@ const METHOD_LABEL = { efectivo: 'Efectivo', qr: 'QR / Transferencia' };
 
 function Stat({ label, value, unit, sub }) {
   return (
-    <div className="admin-stat">
-      <div className="admin-stat-label">{label}</div>
-      <div className="admin-stat-value">{value}{unit && <small>{unit}</small>}</div>
-      {sub && <div className="admin-stat-sub">{sub}</div>}
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{value}{unit && <small>{unit}</small>}</div>
+      {sub && <div className="stat-sub">{sub}</div>}
     </div>
   );
 }
@@ -18,23 +17,20 @@ function Stat({ label, value, unit, sub }) {
 export function AdminDashboard() {
   const { stats, loading, error } = useAdminStats();
 
-  if (error) {
-    return <p className="admin-empty">Error: {error.message}</p>;
-  }
-  if (loading || !stats) {
-    return <p className="admin-empty">Cargando…</p>;
-  }
+  if (error) return <p className="s-empty">Error: {error.message}</p>;
+  if (loading || !stats) return <p className="s-empty">Cargando…</p>;
 
   const occupancyPct = stats.totalTables > 0
-    ? Math.round((stats.tablesOccupied / stats.totalTables) * 100)
-    : 0;
+    ? Math.round((stats.tablesOccupied / stats.totalTables) * 100) : 0;
 
   return (
-    <>
-      <h1 className="admin-h1">Resumen del día</h1>
-      <p className="admin-sub">Actualiza en vivo · última lectura {formatTime(stats.updatedAt)}</p>
+    <div>
+      <div className="admin-bar">
+        <h3>Resumen del día</h3>
+        <span className="count">última lectura {formatTime(stats.updatedAt)}</span>
+      </div>
 
-      <div className="admin-stats">
+      <div className="stat-grid">
         <Stat label="Facturación hoy" value={money(stats.revenueToday)} unit=" Bs"
               sub={`${stats.ordersPaidCount} cobro${stats.ordersPaidCount === 1 ? '' : 's'} · ticket prom ${money(Math.round(stats.avgTicket))} Bs`} />
         <Stat label="Mesas activas" value={stats.tablesOccupied}
@@ -45,61 +41,54 @@ export function AdminDashboard() {
               sub="desde cobro hasta entregar" />
       </div>
 
-      <h2 className="admin-h2">Cobros por método</h2>
+      <h2 className="s-h2">Cobros por método</h2>
       {Object.keys(stats.byMethod).length === 0
-        ? <p className="admin-empty">Sin cobros todavía hoy.</p>
+        ? <p className="s-sub">Sin cobros todavía.</p>
         : (
-          <div className="admin-table-wrap" style={{ padding: '14px 18px' }}>
+          <div className="panel">
             {Object.entries(stats.byMethod).map(([m, t]) => {
               const pct = stats.revenueToday > 0 ? (t / stats.revenueToday) * 100 : 0;
               return (
-                <div key={m} style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <div key={m} className="method-row">
+                  <div className="method-top">
                     <span>{METHOD_LABEL[m] ?? m}</span>
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(t)} Bs · {pct.toFixed(0)}%</span>
+                    <span className="num">{money(t)} Bs · {pct.toFixed(0)}%</span>
                   </div>
-                  <div style={{ height: 6, background: 'var(--a-line-soft)', borderRadius: 999, marginTop: 4, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--a-accent)', borderRadius: 999, transition: 'width .4s' }} />
-                  </div>
+                  <div className="method-bar"><i style={{ width: pct + '%' }} /></div>
                 </div>
               );
             })}
           </div>
         )}
 
-      <h2 className="admin-h2">Top productos del día</h2>
+      <h2 className="s-h2">Top productos del día</h2>
       {stats.topProducts.length === 0
-        ? <p className="admin-empty">Aún no hay productos vendidos.</p>
+        ? <p className="s-sub">Aún no hay ventas.</p>
         : (
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead><tr><th>#</th><th>Producto</th><th className="admin-cell-num">Cant.</th><th className="admin-cell-num">Revenue</th></tr></thead>
-              <tbody>
-                {stats.topProducts.map((p, i) => (
-                  <tr key={p.name}>
-                    <td>{i + 1}</td>
-                    <td>{p.name}</td>
-                    <td className="admin-cell-num">{p.qty}</td>
-                    <td className="admin-cell-num">{money(p.revenue)} Bs</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="panel">
+            {stats.topProducts.map((p, i) => (
+              <div key={p.name} className="rank-row">
+                <span className="rank-n">{i + 1}</span>
+                <span className="rank-name">{p.name}</span>
+                <span className="rank-qty">{p.qty}×</span>
+                <span className="rank-rev">{money(p.revenue)} Bs</span>
+              </div>
+            ))}
           </div>
         )}
 
       {stats.alerts.length > 0 && (
         <>
-          <h2 className="admin-h2" style={{ color: 'var(--a-crit)' }}>⚠ Alertas</h2>
-          <div className="admin-table-wrap" style={{ padding: 14 }}>
+          <h2 className="s-h2" style={{ color: 'var(--s-crit)' }}>⚠ Alertas</h2>
+          <div className="alert-list">
             {stats.alerts.map((a) => (
-              <p key={a.table_id} style={{ margin: '6px 0', color: 'var(--a-crit)' }}>
+              <div key={a.table_id} className="alert-row">
                 Mesa {a.table_id} abierta hace más de 3 horas (desde {formatTime(a.opened_at)})
-              </p>
+              </div>
             ))}
           </div>
         </>
       )}
-    </>
+    </div>
   );
 }

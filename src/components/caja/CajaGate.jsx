@@ -1,4 +1,4 @@
-// CajaGate.jsx — pantalla de login (password + selector de mesero).
+// CajaGate.jsx — pantalla de login (password + selector de mesero). Tema blanco.
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { CAJA_PASSWORD, isAuthed, setSession } from '../../lib/cajaSession.js';
@@ -34,42 +34,45 @@ export function CajaGate() {
   };
 
   return (
-    <div className="caja-gate">
-      <Link to="/" className="caja-gate-back">← Volver al sitio</Link>
-      <div className="caja-gate-leaf" aria-hidden="true">🌿</div>
-      <h1 className="caja-gate-title">Caja · Botánica</h1>
-      {step === 'password' && (
-        <form onSubmit={submitPassword} className="caja-gate-form">
-          <label className="field">
-            <span>Contraseña</span>
-            <input
-              type="password"
-              inputMode="numeric"
-              autoFocus
-              value={pw}
-              onChange={(e) => { setPw(e.target.value); setError(null); }}
-              placeholder="••••••••"
-            />
-          </label>
-          {error && <p className="caja-gate-error">{error}</p>}
-          <button type="submit" className="btn-gold btn-gold--block" disabled={!pw}>
-            Continuar
-          </button>
-        </form>
-      )}
-      {step === 'server' && (
-        <div className="caja-gate-form">
-          <p className="caja-gate-sub">¿Quién está atendiendo?</p>
-          <div className="caja-gate-servers">
-            {SERVERS.map((s) => (
-              <button key={s.id} className="caja-gate-server" onClick={() => pickServer(s.id)}>
-                <span className="caja-gate-server-ini">{s.label[0]}</span>
-                <span className="caja-gate-server-name">{s.label}</span>
-              </button>
-            ))}
+    <div className="staff-shell">
+      <div className="staff-gate">
+        <Link to="/" className="gate-back">← Volver al sitio</Link>
+        <div className="gate-leaf" aria-hidden="true">🌿</div>
+        <h1 className="gate-title">Personal · Botánica</h1>
+        <p className="gate-sub">Acceso a caja, cocina y administración</p>
+        {step === 'password' && (
+          <form onSubmit={submitPassword} className="gate-form">
+            <label className="field">
+              <span>Contraseña</span>
+              <input
+                type="password"
+                inputMode="numeric"
+                autoFocus
+                value={pw}
+                onChange={(e) => { setPw(e.target.value); setError(null); }}
+                placeholder="••••••••"
+              />
+            </label>
+            {error && <p className="gate-error">{error}</p>}
+            <button type="submit" className="btn-primary" disabled={!pw}>
+              Continuar
+            </button>
+          </form>
+        )}
+        {step === 'server' && (
+          <div className="gate-form">
+            <p className="s-sub" style={{ textAlign: 'center', marginBottom: 4 }}>¿Quién está atendiendo?</p>
+            <div className="gate-servers">
+              {SERVERS.map((s) => (
+                <button key={s.id} className="gate-server" onClick={() => pickServer(s.id)}>
+                  <span className="gate-server-ini">{s.label[0]}</span>
+                  <span className="gate-server-name">{s.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -34,7 +34,7 @@ export async function createProduct(p) {
 
 export async function updateProduct(id, patch) {
   // Sanitizar: solo permite los campos editables
-  const allowed = ['name', 'description', 'category_id', 'category_name', 'category_tag', 'price', 'sort_order', 'is_active'];
+  const allowed = ['name', 'description', 'category_id', 'category_name', 'category_tag', 'price', 'sort_order', 'is_active', 'image_url'];
   const safe = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
   if (safe.price != null) safe.price = Number(safe.price);
   if (safe.sort_order != null) safe.sort_order = Number(safe.sort_order);

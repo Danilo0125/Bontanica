@@ -1,4 +1,4 @@
-// Products.jsx — tabla CRUD de productos con edición inline + subida de imágenes.
+// Products.jsx — CRUD de productos como lista vertical de cards (sin tabla).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { listAllProducts, createProduct, updateProduct } from '../../../lib/productApi.js';
 import { uploadProductImage, deleteProductImageByUrl } from '../../../lib/storageApi.js';
@@ -7,7 +7,7 @@ import { useToast } from '../Toasts.jsx';
 function NewProductModal({ onClose, onCreated, existingCategories }) {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
-  const [categoryMode, setCategoryMode] = useState(existingCategories[0] ?? 'new');
+  const [categoryMode, setCategoryMode] = useState(existingCategories[0]?.id ?? 'new');
   const [newCatId, setNewCatId] = useState('');
   const [newCatName, setNewCatName] = useState('');
   const [description, setDescription] = useState('');
@@ -40,26 +40,26 @@ function NewProductModal({ onClose, onCreated, existingCategories }) {
   };
 
   return (
-    <div className="admin-modal-scrim" onClick={() => !busy && onClose()}>
-      <form className="admin-modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div className="admin-modal-head">
+    <div className="s-modal-scrim" onClick={() => !busy && onClose()}>
+      <form className="s-modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div className="s-modal-head">
           <h3>Nuevo producto</h3>
-          <button type="button" className="admin-modal-close" onClick={onClose}>×</button>
+          <button type="button" className="s-modal-close" onClick={onClose}>×</button>
         </div>
-        <div className="admin-modal-body admin-form">
-          <div className="admin-field">
+        <div className="s-modal-body">
+          <div className="field">
             <label>Nombre</label>
             <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Precio (Bs)</label>
             <input type="number" min="0" step="1" value={price} onChange={(e) => setPrice(e.target.value)} required />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Descripción (opcional)</label>
             <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Categoría</label>
             <select value={categoryMode} onChange={(e) => setCategoryMode(e.target.value)}>
               {existingCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -68,20 +68,20 @@ function NewProductModal({ onClose, onCreated, existingCategories }) {
           </div>
           {categoryMode === 'new' && (
             <>
-              <div className="admin-field">
+              <div className="field">
                 <label>Nombre de la categoría nueva</label>
                 <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} required />
               </div>
-              <div className="admin-field">
+              <div className="field">
                 <label>ID (slug, opcional)</label>
                 <input value={newCatId} onChange={(e) => setNewCatId(e.target.value)} placeholder="auto" />
               </div>
             </>
           )}
         </div>
-        <div className="admin-modal-foot">
-          <button type="button" className="admin-btn admin-btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>
-          <button type="submit" className="admin-btn admin-btn-primary" disabled={busy}>
+        <div className="s-modal-foot">
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>Cancelar</button>
+          <button type="submit" className="btn-cobrar" disabled={busy}>
             {busy ? 'Creando…' : 'Crear producto'}
           </button>
         </div>
@@ -90,34 +90,34 @@ function NewProductModal({ onClose, onCreated, existingCategories }) {
   );
 }
 
-function ProductImageCell({ product, disabled, onUpload, onRemove }) {
+function ProdPhoto({ product, disabled, onUpload, onRemove }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
   const pick = () => inputRef.current?.click();
   const change = async (e) => {
     const f = e.target.files?.[0];
-    e.target.value = ''; // permite re-elegir mismo archivo
+    e.target.value = '';
     if (!f) return;
     setUploading(true);
     try { await onUpload(product, f); } finally { setUploading(false); }
   };
+
   return (
-    <div className="img-cell">
-      <button type="button" className="img-thumb" onClick={pick}
+    <div style={{ position: 'relative' }}>
+      <button type="button" className="prod-photo" onClick={pick}
               disabled={disabled || uploading}
               aria-label={product.image_url ? 'Cambiar imagen' : 'Subir imagen'}>
         {product.image_url
           ? <img src={product.image_url} alt={product.name} loading="lazy" />
-          : <span className="img-placeholder">📷</span>}
-        {uploading && <span className="img-uploading">…</span>}
+          : <span className="prod-photo-placeholder">📷</span>}
+        {uploading && <span className="prod-photo-uploading">…</span>}
       </button>
       {product.image_url && !uploading && (
-        <button type="button" className="img-remove" onClick={() => onRemove(product)}
+        <button type="button" className="prod-photo-remove" onClick={() => onRemove(product)}
                 disabled={disabled} aria-label="Quitar imagen" title="Quitar imagen">×</button>
       )}
-      <input ref={inputRef} type="file" accept="image/*" onChange={change}
-             style={{ display: 'none' }} />
+      <input ref={inputRef} type="file" accept="image/*" onChange={change} style={{ display: 'none' }} />
     </div>
   );
 }
@@ -153,7 +153,7 @@ export function Products() {
       setProducts((arr) => arr.map((p) => (p.id === id ? updated : p)));
     } catch (e) {
       toast.error(`No se pudo guardar: ${e.message}`);
-      load(); // revert UI
+      load();
     } finally { setSavingId(null); }
   };
 
@@ -164,7 +164,6 @@ export function Products() {
     try {
       const { url } = await uploadProductImage(product.id, file);
       const updated = await updateProduct(product.id, { image_url: url });
-      // Borrar la imagen vieja después (best effort)
       if (product.image_url) deleteProductImageByUrl(product.image_url);
       setProducts((arr) => arr.map((p) => (p.id === product.id ? updated : p)));
       toast.success(`Foto de "${product.name}" actualizada`);
@@ -186,63 +185,67 @@ export function Products() {
     finally { setSavingId(null); }
   };
 
-  if (loading) return <p className="admin-empty">Cargando productos…</p>;
+  if (loading) return <p className="s-empty">Cargando productos…</p>;
+
+  // Agrupar por categoría
+  const byCat = new Map();
+  for (const p of products) {
+    if (!byCat.has(p.category_id)) byCat.set(p.category_id, { id: p.category_id, name: p.category_name, items: [] });
+    byCat.get(p.category_id).items.push(p);
+  }
 
   return (
-    <>
-      <h1 className="admin-h1">Productos</h1>
-      <p className="admin-sub">Editá precios, nombres, o desactivá productos. Los cambios impactan al instante en la carta y el picker del mesero.</p>
-
-      <div className="admin-actions-bar">
-        <span style={{ color: 'var(--a-text-muted)', fontSize: 13 }}>{products.length} producto{products.length !== 1 ? 's' : ''}</span>
-        <button className="admin-btn admin-btn-primary" onClick={() => setModal(true)}>+ Nuevo producto</button>
+    <div>
+      <div className="admin-bar">
+        <h3>Productos <span className="count">· {products.length}</span></h3>
+        <button className="admin-add" onClick={() => setModal(true)}>＋ Nuevo</button>
       </div>
 
-      <div className="admin-table-wrap">
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th style={{ width: 70 }}>Foto</th>
-              <th>Producto</th>
-              <th>Categoría</th>
-              <th className="admin-cell-num">Precio (Bs)</th>
-              <th className="admin-cell-num">Orden</th>
-              <th>Activo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td>
-                  <ProductImageCell product={p} disabled={savingId === p.id}
-                                    onUpload={onUploadImage} onRemove={onRemoveImage} />
-                </td>
-                <td>
-                  <input defaultValue={p.name}
+      {Array.from(byCat.values()).map((cat) => (
+        <div key={cat.id} style={{ marginBottom: 18 }}>
+          <h2 className="s-h2">{cat.name}</h2>
+          <div className="prod-list">
+            {cat.items.map((p) => (
+              <div key={p.id} className={`prod-card ${p.is_active ? '' : 'is-off'}`}>
+                <ProdPhoto product={p} disabled={savingId === p.id}
+                           onUpload={onUploadImage} onRemove={onRemoveImage} />
+                <div className="prod-fields">
+                  <input className="prod-name-input" defaultValue={p.name}
                     onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== p.name) onPatch(p.id, { name: v }); }} />
-                </td>
-                <td style={{ color: 'var(--a-text-muted)', fontSize: 13 }}>{p.category_name}</td>
-                <td className="admin-cell-num">
-                  <input type="number" min="0" step="1" defaultValue={p.price}
-                    onBlur={(e) => { const v = Number(e.target.value); if (v >= 0 && v !== Number(p.price)) onPatch(p.id, { price: v }); }} />
-                </td>
-                <td className="admin-cell-num">
-                  <input type="number" defaultValue={p.sort_order}
-                    onBlur={(e) => { const v = Number(e.target.value); if (v !== Number(p.sort_order)) onPatch(p.id, { sort_order: v }); }} />
-                </td>
-                <td>
-                  <label className="admin-toggle">
+                  <div className="prod-meta">
+                    <div className="field-inline">
+                      <label>Precio</label>
+                      <div className="price-input">
+                        <input type="number" min="0" step="1" defaultValue={p.price}
+                          onBlur={(e) => { const v = Number(e.target.value); if (v >= 0 && v !== Number(p.price)) onPatch(p.id, { price: v }); }} />
+                        <span>Bs</span>
+                      </div>
+                    </div>
+                    <div className="field-inline">
+                      <label>Categoría</label>
+                      <select className="cat-select" value={p.category_id}
+                              onChange={(e) => {
+                                const newCat = categories.find((c) => c.id === e.target.value);
+                                if (newCat) onPatch(p.id, { category_id: newCat.id, category_name: newCat.name });
+                              }}>
+                        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="prod-actions">
+                  <label className="sw" title={p.is_active ? 'Activo' : 'Inactivo'}>
                     <input type="checkbox" checked={p.is_active}
                       onChange={(e) => onPatch(p.id, { is_active: e.target.checked })}
                       disabled={savingId === p.id} />
-                    <span className="admin-toggle-track" />
+                    <span className="sw-track" />
                   </label>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </div>
+      ))}
 
       {modal && (
         <NewProductModal
@@ -251,6 +254,6 @@ export function Products() {
           existingCategories={categories}
         />
       )}
-    </>
+    </div>
   );
 }

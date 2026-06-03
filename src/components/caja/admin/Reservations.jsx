@@ -1,4 +1,4 @@
-// Reservations.jsx — gestión de reservas.
+// Reservations.jsx — reservas como cards verticales agrupadas por día.
 import { useEffect, useState } from 'react';
 import { listReservations, createReservation, updateReservation, deleteReservation } from '../../../lib/reservationApi.js';
 import { useTables } from '../../../lib/useTables.js';
@@ -7,10 +7,10 @@ import { formatTime } from '../../../lib/format.js';
 import { getSession } from '../../../lib/cajaSession.js';
 
 const STATUS = {
-  confirmed: { label: 'Confirmada', cls: 'admin-pill-ok' },
-  seated:    { label: 'Sentada',    cls: 'admin-pill-warn' },
-  cancelled: { label: 'Cancelada',  cls: 'admin-pill-crit' },
-  'no-show': { label: 'No vino',    cls: 'admin-pill-muted' },
+  confirmed: 'Confirmada',
+  seated:    'Sentada',
+  cancelled: 'Cancelada',
+  'no-show': 'No vino',
 };
 
 function todayISO() {
@@ -22,12 +22,6 @@ function todayPlusDays(n) {
   const d = new Date();
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
-}
-
-function fmtDate(iso) {
-  try {
-    return new Date(iso).toLocaleString('es-BO', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  } catch { return iso; }
 }
 
 export function Reservations() {
@@ -49,8 +43,10 @@ export function Reservations() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
-  const setStatus = async (r, status) => {
-    try { await updateReservation(r.id, { status }); load(); toast.info(`Reserva → ${STATUS[status]?.label ?? status}`); }
+  const cycleStatus = async (r) => {
+    const order = ['confirmed', 'seated', 'cancelled', 'no-show'];
+    const next = order[(order.indexOf(r.status) + 1) % order.length];
+    try { await updateReservation(r.id, { status: next }); load(); toast.info(`Reserva → ${STATUS[next]}`); }
     catch (e) { toast.error(e.message); }
   };
   const remove = async (r) => {
@@ -59,9 +55,8 @@ export function Reservations() {
     catch (e) { toast.error(e.message); }
   };
 
-  if (loading) return <p className="admin-empty">Cargando reservas…</p>;
+  if (loading) return <p className="s-empty">Cargando reservas…</p>;
 
-  // Agrupar por día
   const byDay = new Map();
   for (const r of reservations) {
     const k = r.reserved_at.slice(0, 10);
@@ -70,60 +65,56 @@ export function Reservations() {
   }
 
   return (
-    <>
-      <h1 className="admin-h1">Reservas</h1>
-      <p className="admin-sub">Anotá reservas de mesa. Aparecen en la grilla del mesero para que sepa antes de abrir la cuenta.</p>
-
-      <div className="admin-actions-bar">
-        <span style={{ color: 'var(--a-text-muted)', fontSize: 13 }}>{reservations.length} reserva{reservations.length !== 1 ? 's' : ''} (-1d / +30d)</span>
-        <button className="admin-btn admin-btn-primary" onClick={() => setShowForm(true)}>+ Nueva reserva</button>
+    <div>
+      <div className="admin-bar">
+        <h3>Reservas <span className="count">· {reservations.length}</span></h3>
+        <button className="admin-add" onClick={() => setShowForm(true)}>＋ Nueva reserva</button>
       </div>
+      <p className="s-sub" style={{ marginBottom: 12 }}>
+        Anotá reservas de mesa para anticipar la noche.
+      </p>
 
       {reservations.length === 0
-        ? <div className="admin-empty"><p>Sin reservas todavía.</p></div>
-        : (
-          <>
-            {Array.from(byDay.entries()).map(([day, rs]) => (
-              <div key={day} style={{ marginBottom: 18 }}>
-                <h2 className="admin-h2">{new Date(day + 'T12:00:00').toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
-                    <thead><tr><th>Hora</th><th>Cliente</th><th>Mesa</th><th>Personas</th><th>Estado</th><th></th></tr></thead>
-                    <tbody>
-                      {rs.map((r) => (
-                        <tr key={r.id}>
-                          <td><strong>{formatTime(r.reserved_at)}</strong></td>
-                          <td>
-                            {r.customer_name}
-                            {r.customer_phone && <><br/><small style={{ color: 'var(--a-text-muted)' }}>{r.customer_phone}</small></>}
-                            {r.notes && <><br/><small style={{ color: 'var(--a-text-muted)', fontStyle: 'italic' }}>{r.notes}</small></>}
-                          </td>
-                          <td>Mesa {r.table_id}</td>
-                          <td className="admin-cell-num">{r.party_size}</td>
-                          <td>
-                            <select value={r.status} onChange={(e) => setStatus(r, e.target.value)} className="admin-pill" style={{ padding: '3px 6px' }}>
-                              {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                            </select>
-                          </td>
-                          <td>
-                            <button className="admin-btn admin-btn-danger admin-btn-icon" onClick={() => remove(r)}>Borrar</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+        ? <div className="s-empty"><p>Sin reservas todavía.</p></div>
+        : Array.from(byDay.entries()).map(([day, rs]) => (
+          <div key={day}>
+            <div className="resv-day-head">
+              {new Date(day + 'T12:00:00').toLocaleDateString('es-BO', {
+                weekday: 'long', day: 'numeric', month: 'long',
+              })}
+            </div>
+            <div className="resv-list">
+              {rs.map((r) => (
+                <div key={r.id} className="resv-card">
+                  <span className="resv-ini">{r.customer_name[0]?.toUpperCase() ?? '?'}</span>
+                  <div className="resv-main">
+                    <b>
+                      {r.customer_name}
+                      <span className="resv-people"> · {r.party_size} pers.</span>
+                    </b>
+                    <span>
+                      {formatTime(r.reserved_at)} · Mesa {r.table_id}
+                      {r.customer_phone && ` · ${r.customer_phone}`}
+                      {r.notes && ` · ${r.notes}`}
+                    </span>
+                  </div>
+                  <button className={`resv-status ${r.status}`} onClick={() => cycleStatus(r)}
+                          title="Cambiar estado">
+                    {STATUS[r.status] ?? r.status}
+                  </button>
+                  <button className="icon-del" onClick={() => remove(r)} aria-label="Borrar">🗑</button>
                 </div>
-              </div>
-            ))}
-          </>
-        )}
+              ))}
+            </div>
+          </div>
+        ))}
 
       {showForm && (
         <NewReservationModal tables={tables}
           onClose={() => setShowForm(false)}
           onSaved={() => { setShowForm(false); load(); }} />
       )}
-    </>
+    </div>
   );
 }
 
@@ -157,51 +148,51 @@ function NewReservationModal({ tables, onClose, onSaved }) {
   };
 
   return (
-    <div className="admin-modal-scrim" onClick={() => !busy && onClose()}>
-      <form className="admin-modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div className="admin-modal-head">
+    <div className="s-modal-scrim" onClick={() => !busy && onClose()}>
+      <form className="s-modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div className="s-modal-head">
           <h3>Nueva reserva</h3>
-          <button type="button" className="admin-modal-close" onClick={onClose}>×</button>
+          <button type="button" className="s-modal-close" onClick={onClose}>×</button>
         </div>
-        <div className="admin-modal-body admin-form">
-          <div className="admin-field">
+        <div className="s-modal-body">
+          <div className="field">
             <label>Nombre del cliente</label>
             <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Teléfono</label>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="opcional" />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Mesa</label>
             <select value={tableId} onChange={(e) => setTableId(Number(e.target.value))}>
               {tables.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Personas</label>
             <input type="number" min="1" max="20" value={partySize} onChange={(e) => setPartySize(Number(e.target.value))} />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Fecha</label>
             <input type="date" value={date} min={todayISO()} max={todayPlusDays(60)} onChange={(e) => setDate(e.target.value)} />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Hora</label>
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Duración (min)</label>
             <input type="number" min="30" step="15" value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
           </div>
-          <div className="admin-field">
+          <div className="field">
             <label>Notas</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="opcional · alergias, ocasión, etc." />
           </div>
         </div>
-        <div className="admin-modal-foot">
-          <button type="button" className="admin-btn admin-btn-secondary" onClick={onClose} disabled={busy}>Cancelar</button>
-          <button type="submit" className="admin-btn admin-btn-primary" disabled={busy}>
+        <div className="s-modal-foot">
+          <button type="button" className="btn-ghost" onClick={onClose} disabled={busy}>Cancelar</button>
+          <button type="submit" className="btn-cobrar" disabled={busy}>
             {busy ? 'Creando…' : 'Crear reserva'}
           </button>
         </div>

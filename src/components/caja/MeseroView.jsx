@@ -1,32 +1,27 @@
-// MeseroView.jsx — grilla de mesas. La mesa está OCUPADA si tiene al menos
-// 1 batch en estado 'paid' (no delivered ni cancelled).
+// MeseroView.jsx — grilla de mesas (tema blanco). La mesa está OCUPADA si tiene
+// al menos 1 batch en estado 'paid' (no delivered ni cancelled).
 import { Link } from 'react-router-dom';
 import { useTables } from '../../lib/useTables.js';
 import { useOpenOrders } from '../../lib/useOrders.js';
 import { money, minutesSince } from '../../lib/format.js';
 
-// Total en pie de pago para esta orden (suma de batches no cancelados)
 const totalOf = (order) =>
   (order?.batches ?? []).filter((b) => b.status !== 'cancelled')
     .reduce((s, b) => s + Number(b.total), 0);
 
-// Items pendientes/listos (no delivered, no cancelled)
 const activeItems = (order) =>
   (order?.items ?? []).filter((it) => it.status !== 'cancelled');
 
 const activeItemsCount = (order) =>
   activeItems(order).reduce((s, it) => s + it.qty, 0);
 
-// Una orden con batches paid sigue ocupando la mesa.
 const isOccupied = (order) => {
   if (!order) return false;
-  const batches = order.batches ?? [];
-  return batches.some((b) => b.status === 'paid');
+  return (order.batches ?? []).some((b) => b.status === 'paid');
 };
 
 const hasReadyBatch = (order) => {
   if (!order) return false;
-  // batch.status='paid' pero todos sus items ready → listo para entregar
   const itemsByBatch = new Map();
   for (const it of order.items ?? []) {
     if (!itemsByBatch.has(it.batch_id)) itemsByBatch.set(it.batch_id, []);
@@ -59,19 +54,22 @@ export function MeseroView() {
 
   if (error) {
     return (
-      <div className="caja-empty">
+      <div className="s-empty">
         <p>No pudimos cargar las mesas. Revisá la conexión.</p>
-        <pre className="caja-error">{error.message}</pre>
+        <pre style={{ color: 'var(--s-crit)', fontSize: 12 }}>{error.message}</pre>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="mesas-grid">
-        {Array.from({ length: 25 }).map((_, i) => (
-          <div key={i} className="mesa-card mesa-skel shimmer" aria-hidden="true" />
-        ))}
+      <div>
+        <h1 className="s-h1">Mesas</h1>
+        <div className="mesas-grid">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="mesa-card" aria-hidden="true" style={{ opacity: .5 }} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -80,14 +78,15 @@ export function MeseroView() {
   const readyCount = orders.filter(hasReadyBatch).length;
 
   return (
-    <div className="mesero-view">
-      <h2 className="caja-h2">
+    <div>
+      <h1 className="s-h1">
         Mesas
-        <span className="caja-h2-meta">
-          {readyCount > 0 && <><span className="dot-live ready-dot" />{readyCount} listas&nbsp;&nbsp;</>}
+        <span className="s-meta">
+          {readyCount > 0 && <><span className="dot-live ok" />{readyCount} listas</>}
           {occupiedCount > 0 && <><span className="dot-live" />{occupiedCount} ocupadas</>}
         </span>
-      </h2>
+      </h1>
+
       <div className="mesas-grid">
         {tables.map((t) => {
           const order = ordersByTable.get(t.id);
@@ -101,7 +100,7 @@ export function MeseroView() {
                   className={`mesa-card ${occupied ? 'is-occupied' : ''} ${ready ? 'is-ready' : ''}`}>
               <div className="mesa-head">
                 <span className="mesa-status">
-                  {ready ? '✓ LISTO' : occupied ? 'Ocupada' : 'Libre'}
+                  {ready ? '✓ Listo' : occupied ? 'Ocupada' : 'Libre'}
                 </span>
                 {occupied && <span className="mesa-mins">{mins}m</span>}
               </div>
@@ -115,8 +114,8 @@ export function MeseroView() {
                     {summary.rest > 0 && <li className="mesa-preview-more">+{summary.rest} más</li>}
                   </ul>
                   <div className="mesa-total-row">
-                    <span className="mesa-total">{money(tot)} <small>Bs</small></span>
-                    <span className="mesa-count">{activeItemsCount(order)} ítems</span>
+                    <span className="mesa-total">{money(tot)}<small> Bs</small></span>
+                    <span className="mesa-count">{activeItemsCount(order)} ít.</span>
                   </div>
                 </>
               ) : (

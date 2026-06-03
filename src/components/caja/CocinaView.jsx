@@ -1,8 +1,5 @@
 // CocinaView.jsx — cola de tandas pagadas pendientes de preparar.
-//
-// Vista limpia: 1 card grande por tanda, 1 acción primaria abajo.
-// La cocina marca items individualmente a 'ready' (toda la tanda); al hacerlo,
-// el mesero dueño recibe toast + sonido en su pantalla.
+// Tema blanco minimal. Card grande por tanda con borde izq de urgencia.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOpenOrders } from '../../lib/useOrders.js';
 import { useTables } from '../../lib/useTables.js';
@@ -22,8 +19,8 @@ function useTick(ms = 30000) {
 }
 
 function urgencyLevel(mins) {
-  if (mins >= 10) return 'crit';
-  if (mins >= 5) return 'warn';
+  if (mins >= 12) return 'crit';
+  if (mins >= 6) return 'warn';
   return 'ok';
 }
 
@@ -38,7 +35,7 @@ function buildPending(orders, tablesById) {
     for (const b of o.batches ?? []) {
       if (b.status !== 'paid') continue;
       const items = (itemsByBatch.get(b.id) ?? []).filter((it) => it.status === 'pending');
-      if (items.length === 0) continue; // ya todos ready/cancelled
+      if (items.length === 0) continue;
       out.push({
         ...b, items,
         order_id: o.id,
@@ -64,7 +61,6 @@ export function CocinaView() {
   const tablesById = useMemo(() => new Map(tables.map((t) => [t.id, t])), [tables]);
   const pending = useMemo(() => buildPending(orders, tablesById), [orders, tablesById]);
 
-  // Beep al llegar tanda nueva
   useEffect(() => {
     if (loading) return;
     const ids = new Set(pending.map((b) => b.id));
@@ -105,80 +101,85 @@ export function CocinaView() {
   };
 
   if (error) {
-    return <div className="caja-empty"><p>Error cargando la cola.</p><pre className="caja-error">{error.message}</pre></div>;
+    return (
+      <div className="s-empty">
+        <p>Error cargando la cola.</p>
+        <pre style={{ color: 'var(--s-crit)', fontSize: 12 }}>{error.message}</pre>
+      </div>
+    );
   }
-  if (loading) return <div className="caja-empty">Cargando cola…</div>;
+  if (loading) return <div className="s-empty">Cargando cola…</div>;
 
   return (
-    <div className="cocina-view">
-      <h2 className="caja-h2">
-        Cola de cocina <span className="cocina-count">{pending.length}</span>
+    <div>
+      <h1 className="s-h1" style={{ alignItems: 'center' }}>
+        Cola de cocina<span className="cocina-count">{pending.length}</span>
         <button className="audio-toggle" onClick={toggleAudio}
                 aria-label={audioOn ? 'Silenciar' : 'Activar avisos sonoros'}
                 title={audioOn ? 'Sonido activo' : 'Silenciado'}>
           {audioOn ? '🔔' : '🔕'}
         </button>
-      </h2>
+      </h1>
+      <p className="s-sub">Cada tanda ya está pagada. Marcá "Listo" cuando salga de cocina.</p>
 
-      {pending.length === 0 && (
+      {pending.length === 0 ? (
         <div className="cocina-empty">
-          <span aria-hidden="true">🌿</span>
+          <span className="big" aria-hidden="true">🌿</span>
           <p>Sin tandas pendientes. Todo al día.</p>
+        </div>
+      ) : (
+        <div className="cocina-grid">
+          {pending.map((b) => {
+            const mins = minutesSince(b.paid_at);
+            const level = urgencyLevel(mins);
+            const itemCount = b.items.reduce((s, it) => s + it.qty, 0);
+            return (
+              <article key={b.id} className={`cocina-card cocina-card--${level}`}>
+                <header className="cocina-card-head">
+                  <div>
+                    <strong className="cocina-card-mesa">{b.table?.name ?? `Mesa ${b.table_id}`}</strong>
+                    <span className="cocina-card-meta">
+                      {NAME_MAP[b.server_id] ?? b.server_id} · {formatTime(b.paid_at)} · {itemCount} ítems
+                    </span>
+                  </div>
+                  <span className={`cocina-timer cocina-timer--${level}`}>
+                    <span className="cocina-timer-dot" />
+                    {mins === 0 ? 'recién' : `${mins} min`}
+                  </span>
+                </header>
+                <ul className="cocina-card-items">
+                  {b.items.map((it) => (
+                    <li key={it.id} className="coc-item">
+                      <span className="qty">{it.qty}×</span>
+                      <span>{it.product_name_snapshot}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button className="btn-listo" disabled={!!busy[b.id]} onClick={() => setConfirmId(b.id)}>
+                  {busy[b.id] ? 'Marcando…' : '✓ Listo'}
+                </button>
+              </article>
+            );
+          })}
         </div>
       )}
 
-      <div className="cocina-grid">
-        {pending.map((b) => {
-          const mins = minutesSince(b.paid_at);
-          const level = urgencyLevel(mins);
-          const itemCount = b.items.reduce((s, it) => s + it.qty, 0);
-          return (
-            <article key={b.id} className={`cocina-card cocina-card--${level}`}>
-              <header className="cocina-card-head">
-                <div>
-                  <strong className="cocina-card-mesa">{b.table?.name ?? `Mesa ${b.table_id}`}</strong>
-                  <span className="cocina-card-meta">
-                    {NAME_MAP[b.server_id] ?? b.server_id} · {formatTime(b.paid_at)} · {itemCount} ítems
-                  </span>
-                </div>
-                <span className={`cocina-timer cocina-timer--${level}`}>
-                  <span className="cocina-timer-dot" />
-                  {mins === 0 ? 'recién' : `${mins} min`}
-                </span>
-              </header>
-              <ul className="cocina-card-items">
-                {b.items.map((it) => (
-                  <li key={it.id} className="coc-item">
-                    <span className="qty">{it.qty}×</span>
-                    <span className="coc-item-name">{it.product_name_snapshot}</span>
-                  </li>
-                ))}
-              </ul>
-              <button className="btn-listo" disabled={!!busy[b.id]} onClick={() => setConfirmId(b.id)}>
-                {busy[b.id] ? 'Marcando…' : '✓ LISTO'}
-              </button>
-            </article>
-          );
-        })}
-      </div>
-
       {confirmBatch && (
-        <div className="sheet-scrim" onClick={() => setConfirmId(null)}>
-          <div className="pay-sheet confirm-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-grip" />
-            <h3 className="sheet-title">¿Marcar como listo?</h3>
-            <p className="sheet-sub">
-              <strong>{confirmBatch.table?.name}</strong> ·{' '}
-              {confirmBatch.items.reduce((s, it) => s + it.qty, 0)} ítems · sirve {NAME_MAP[confirmBatch.server_id] ?? confirmBatch.server_id}
+        <div className="s-scrim" onClick={() => setConfirmId(null)}>
+          <div className="s-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="s-grip" />
+            <h3 className="s-title">¿Marcar como listo?</h3>
+            <p className="s-sheet-sub">
+              <strong>{confirmBatch.table?.name}</strong> · sirve {NAME_MAP[confirmBatch.server_id] ?? confirmBatch.server_id}
             </p>
             <ul className="confirm-items">
               {confirmBatch.items.map((it) => (
-                <li key={it.id}><span className="qty">{it.qty}×</span> {it.product_name_snapshot}</li>
+                <li key={it.id}><span className="qty">{it.qty}×</span>{it.product_name_snapshot}</li>
               ))}
             </ul>
             <div className="confirm-actions">
-              <button className="btn-ghost" onClick={() => setConfirmId(null)}>Cancelar</button>
-              <button className="btn-gold" onClick={markReady}>Sí, está listo</button>
+              <button className="btn-ghost" onClick={() => setConfirmId(null)}>Volver</button>
+              <button className="btn-primary" style={{ width: 'auto' }} onClick={markReady}>Sí, está listo</button>
             </div>
           </div>
         </div>

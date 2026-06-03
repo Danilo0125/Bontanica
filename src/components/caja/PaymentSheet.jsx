@@ -1,5 +1,5 @@
-// PaymentSheet.jsx — bottom-sheet de cobro. Reusable: emite onConfirm con
-// { method, received_amount } y deja que el caller haga la persistencia.
+// PaymentSheet.jsx — bottom-sheet de cobro (tema blanco).
+// Emite onConfirm con { method, received_amount } y deja al caller la persistencia.
 import { useEffect, useState } from 'react';
 import { money } from '../../lib/format.js';
 
@@ -16,11 +16,13 @@ function useQrAvailability() {
 }
 
 export function PaymentSheet({ total, onClose, onConfirm, submitting = false, contextLabel }) {
-  const [step, setStep] = useState('choose'); // 'choose' | 'efectivo' | 'qr'
+  const [step, setStep] = useState('choose');
   const [received, setReceived] = useState('');
   const qrAvailable = useQrAvailability();
 
   const change = step === 'efectivo' && received !== '' ? Number(received) - total : null;
+  const quick = [total, Math.ceil(total / 50) * 50, Math.ceil(total / 100) * 100]
+    .filter((v, i, a) => a.indexOf(v) === i);
 
   const confirm = (method) => {
     if (submitting) return;
@@ -31,13 +33,13 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
   };
 
   return (
-    <div className="sheet-scrim" onClick={() => !submitting && onClose()}>
-      <div className="pay-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-grip" />
+    <div className="s-scrim" onClick={() => !submitting && onClose()}>
+      <div className="s-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="s-grip" />
         {step === 'choose' && (
           <>
-            <h3 className="sheet-title">Cobrar {money(total)} Bs</h3>
-            {contextLabel && <p className="sheet-sub">{contextLabel}</p>}
+            <h3 className="s-title">Cobrar {money(total)} Bs</h3>
+            {contextLabel && <p className="s-sheet-sub">{contextLabel} · elegí el método de pago</p>}
             <div className="pay-methods">
               <button className="pay-opt" onClick={() => setStep('efectivo')}>
                 <span className="pay-ico">💵</span><span>Efectivo</span>
@@ -50,12 +52,12 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
         )}
         {step === 'efectivo' && (
           <>
-            <h3 className="sheet-title">Efectivo</h3>
-            <p className="sheet-sub">Total: <strong>{money(total)} Bs</strong></p>
+            <h3 className="s-title">Efectivo</h3>
+            <p className="s-sheet-sub">Total a cobrar: <strong>{money(total)} Bs</strong></p>
             <label className="field">
               <span>¿Con cuánto paga?</span>
-              <input type="number" inputMode="numeric" value={received}
-                     onChange={(e) => setReceived(e.target.value)} placeholder="0" autoFocus />
+              <input type="number" inputMode="numeric" value={received} autoFocus placeholder="0"
+                     onChange={(e) => setReceived(e.target.value)} />
             </label>
             {change !== null && received !== '' && (
               <div className={`vuelto ${change < 0 ? 'neg' : ''}`}>
@@ -63,25 +65,23 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
               </div>
             )}
             <div className="quick-cash">
-              {[total, Math.ceil(total / 50) * 50, Math.ceil(total / 100) * 100]
-                .filter((v, i, a) => a.indexOf(v) === i)
-                .map((v) => (
-                  <button key={v} onClick={() => setReceived(String(v))}>{money(v)}</button>
-                ))}
+              {quick.map((v) => (
+                <button key={v} onClick={() => setReceived(String(v))}>{money(v)}</button>
+              ))}
             </div>
-            <button className="btn-gold btn-gold--block"
+            <button className="btn-primary"
                     disabled={received === '' || Number(received) < total || submitting}
                     onClick={() => confirm('efectivo')}>
-              {submitting ? 'Cobrando…' : 'Confirmar cobro'}
+              {submitting ? 'Cobrando…' : 'Confirmar y enviar a cocina'}
             </button>
           </>
         )}
         {step === 'qr' && (
           <>
-            <h3 className="sheet-title">QR / Transferencia</h3>
-            <p className="sheet-sub">Total: <strong>{money(total)} Bs</strong></p>
+            <h3 className="s-title">QR / Transferencia</h3>
+            <p className="s-sheet-sub">Total: <strong>{money(total)} Bs</strong>{contextLabel && ` · ${contextLabel}`}</p>
             <div className="qr-box">
-              {qrAvailable === null && <div className="qr-loading">Cargando QR…</div>}
+              {qrAvailable === null && <p style={{ fontSize: 12.5 }}>Cargando QR…</p>}
               {qrAvailable === true && (
                 <>
                   <img className="qr-img" src={QR_PATH} alt="QR de pago de Botánica" />
@@ -97,9 +97,8 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
                 </div>
               )}
             </div>
-            <button className="btn-gold btn-gold--block" disabled={submitting}
-                    onClick={() => confirm('qr')}>
-              {submitting ? 'Cobrando…' : 'Confirmé el cobro'}
+            <button className="btn-primary" disabled={submitting} onClick={() => confirm('qr')}>
+              {submitting ? 'Cobrando…' : 'Marcar pagado y enviar a cocina'}
             </button>
           </>
         )}
