@@ -10,6 +10,7 @@ import { useTables } from '../../lib/useTables.js';
 import { useToast } from './Toasts.jsx';
 import { createNotification } from '../../lib/notificationsApi.js';
 import { NotificationsTray } from './NotificationsTray.jsx';
+import { PwaPrompt } from './PwaPrompt.jsx';
 
 function vibrate(pattern) {
   try { navigator.vibrate?.(pattern); } catch {}
@@ -152,6 +153,8 @@ export function CajaLayout() {
           <Outlet />
         </div>
       </div>
+
+      <PwaPrompt />
 
       <nav className="staff-nav">
         {NAV.map((n) => (
