@@ -1,5 +1,6 @@
-// NotificationsTray.jsx — campana 🔔 + bandeja persistente.
-// El item entero es clickeable y navega a la mesa correspondiente.
+// NotificationsTray.jsx — campana + bandeja.
+// Responsive: dropdown anclado en desktop / bottom-sheet en mobile.
+// Estilos en src/styles/staff.css (.notif-*).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../lib/useNotifications.js';
@@ -15,26 +16,43 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-const KIND_META = {
-  ready: { icon: '🍽️', color: '#3f6212', bg: '#f0f9eb' },
-  info:  { icon: 'ℹ️',  color: '#1e40af', bg: '#eff6ff' },
-  warn:  { icon: '⚠️', color: '#9a3412', bg: '#fff7ed' },
-};
+const KIND_ICON = { ready: '🍽️', info: 'ℹ️', warn: '⚠️' };
 
 export function NotificationsTray({ recipient }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
+  const panelRef = useRef(null);
   const navigate = useNavigate();
   const { items, unreadCount } = useNotifications(recipient);
 
-  // Cierra al click afuera (mobile-friendly: respeta toques).
+  // Cerrar al click afuera (desktop). En mobile el scrim ya cubre todo.
   useEffect(() => {
     if (!open) return;
     const onDown = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      if (panelRef.current?.contains(e.target)) return;
+      if (wrapRef.current?.contains(e.target)) return;
+      setOpen(false);
     };
     window.addEventListener('pointerdown', onDown);
     return () => window.removeEventListener('pointerdown', onDown);
+  }, [open]);
+
+  // Cerrar con Escape
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  // Lockear scroll del body cuando la sheet está abierta en mobile
+  useEffect(() => {
+    if (!open) return;
+    const isMobile = window.matchMedia('(max-width: 640px)').matches;
+    if (!isMobile) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
   }, [open]);
 
   const onItemClick = useCallback(async (n) => {
@@ -55,129 +73,73 @@ export function NotificationsTray({ recipient }) {
   if (!recipient) return null;
 
   return (
-    <div ref={wrapRef} className="notif-wrap" style={{ position: 'relative' }}>
+    <div ref={wrapRef} className="notif-wrap">
       <button
         type="button"
+        className={`notif-bell${unreadCount > 0 ? ' has-unread' : ''}`}
         onClick={() => setOpen((v) => !v)}
         aria-label={unreadCount > 0 ? `${unreadCount} notificaciones sin leer` : 'Notificaciones'}
-        className="notif-bell"
-        style={{
-          position: 'relative',
-          background: unreadCount > 0 ? '#fef3c7' : 'transparent',
-          border: unreadCount > 0 ? '1.5px solid #d97706' : '1.5px solid #e5e7eb',
-          borderRadius: 999,
-          width: 40, height: 40,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer',
-          fontSize: 20,
-          transition: 'transform 120ms ease',
-        }}
+        aria-expanded={open}
       >
-        <span style={{ animation: unreadCount > 0 ? 'notif-shake 1.6s ease-in-out infinite' : 'none' }}>🔔</span>
+        <span className="notif-bell-ico" aria-hidden="true">🔔</span>
         {unreadCount > 0 && (
-          <span style={{
-            position: 'absolute', top: -4, right: -4,
-            background: '#dc2626', color: '#fff',
-            borderRadius: 999, minWidth: 20, height: 20,
-            fontSize: 11, fontWeight: 700,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            padding: '0 5px', border: '2px solid #fff',
-          }}>
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
+          <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
         )}
       </button>
 
       {open && (
-        <div
-          role="dialog"
-          aria-label="Notificaciones"
-          className="notif-panel"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            width: 'min(360px, calc(100vw - 24px))',
-            maxHeight: 'min(70vh, 520px)',
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 14,
-            boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
-            zIndex: 1000,
-            overflow: 'hidden',
-            display: 'flex', flexDirection: 'column',
-          }}
-        >
-          <header style={{
-            padding: '12px 14px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            borderBottom: '1px solid #f3f4f6',
-            background: '#fafaf9',
-          }}>
-            <strong style={{ fontSize: 15 }}>Notificaciones</strong>
-            {unreadCount > 0 && (
-              <button onClick={onMarkAllRead} style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: '#3f6212', fontSize: 12.5, fontWeight: 600, padding: 4,
-              }}>
-                Marcar todas como leídas
-              </button>
-            )}
-          </header>
-
-          <div style={{ overflowY: 'auto', flex: 1 }}>
-            {items.length === 0 ? (
-              <div style={{ padding: '28px 16px', textAlign: 'center', color: '#6b7280', fontSize: 13.5 }}>
-                <div style={{ fontSize: 30, marginBottom: 6 }} aria-hidden="true">🌿</div>
-                Sin notificaciones todavía.
+        <>
+          {/* Scrim solo aparece en mobile (CSS) */}
+          <div className="notif-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div ref={panelRef} className="notif-panel" role="dialog" aria-label="Notificaciones">
+            <header className="notif-head">
+              <strong className="notif-head-title">Notificaciones</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {unreadCount > 0 && (
+                  <button className="notif-mark-all" onClick={onMarkAllRead}>
+                    Marcar todas leídas
+                  </button>
+                )}
+                <button className="notif-close" onClick={() => setOpen(false)} aria-label="Cerrar">×</button>
               </div>
-            ) : items.map((n) => {
-              const meta = KIND_META[n.kind] ?? KIND_META.info;
-              const clickable = n.table_id != null;
-              return (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => onItemClick(n)}
-                  disabled={!clickable && n.is_read}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '12px 14px',
-                    background: n.is_read ? '#fff' : meta.bg,
-                    border: 'none',
-                    borderBottom: '1px solid #f3f4f6',
-                    cursor: clickable ? 'pointer' : 'default',
-                    display: 'flex', gap: 10, alignItems: 'flex-start',
-                    transition: 'background 120ms ease',
-                  }}
-                >
-                  <span style={{ fontSize: 22, lineHeight: 1 }} aria-hidden="true">{meta.icon}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {n.title && (
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: meta.color }}>
-                        {n.title}
-                        {!n.is_read && (
-                          <span style={{
-                            display: 'inline-block', marginLeft: 6,
-                            width: 7, height: 7, borderRadius: 999,
-                            background: '#dc2626', verticalAlign: 'middle',
-                          }} aria-label="No leída" />
-                        )}
+            </header>
+
+            <div className="notif-list">
+              {items.length === 0 ? (
+                <div className="notif-empty">
+                  <span className="leaf" aria-hidden="true">🌿</span>
+                  Sin notificaciones todavía.
+                </div>
+              ) : items.map((n) => {
+                const clickable = n.table_id != null;
+                const kindClass = `kind-${n.kind ?? 'info'}`;
+                const unreadClass = n.is_read ? '' : ' is-unread';
+                return (
+                  <button
+                    key={n.id}
+                    type="button"
+                    className={`notif-item ${kindClass}${unreadClass}`}
+                    onClick={() => onItemClick(n)}
+                  >
+                    <span className="notif-item-ico" aria-hidden="true">{KIND_ICON[n.kind] ?? 'ℹ️'}</span>
+                    <div className="notif-item-body">
+                      {n.title && (
+                        <div className="notif-item-title">
+                          {n.title}
+                          {!n.is_read && <span className="notif-item-dot" aria-label="No leída" />}
+                        </div>
+                      )}
+                      <div className="notif-item-msg">{n.message}</div>
+                      <div className="notif-item-meta">
+                        {timeAgo(n.created_at)}{clickable && ' · tocá para ver la mesa'}
                       </div>
-                    )}
-                    <div style={{ fontSize: 13, color: '#374151', marginTop: 2 }}>
-                      {n.message}
                     </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                      {timeAgo(n.created_at)}{clickable && ' · tocá para ver la mesa'}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

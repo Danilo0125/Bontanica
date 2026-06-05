@@ -14,6 +14,8 @@ import { Combos } from './components/caja/admin/Combos.jsx';
 import { Reservations } from './components/caja/admin/Reservations.jsx';
 import { TablesAdmin } from './components/caja/admin/Tables.jsx';
 import { StaffUsers } from './components/caja/admin/StaffUsers.jsx';
+import { Analytics } from './components/caja/admin/Analytics.jsx';
+import { Activity } from './components/caja/admin/Activity.jsx';
 import { ToastProvider } from './components/caja/Toasts.jsx';
 import { AuthProvider } from './lib/auth.jsx';
 
@@ -52,6 +54,8 @@ export function App() {
             <Route path="reservas" element={<Reservations />} />
             <Route path="mesas" element={<TablesAdmin />} />
             <Route path="usuarios" element={<StaffUsers />} />
+            <Route path="analiticas" element={<Analytics />} />
+            <Route path="actividad" element={<Activity />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

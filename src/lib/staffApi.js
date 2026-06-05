@@ -2,6 +2,7 @@
 // El insert va por RPC SECURITY DEFINER porque crear auth.users requiere
 // privilegios elevados que la anon key no tiene.
 import { supabase } from './supabase.js';
+import { logAction } from './auditApi.js';
 
 export async function listStaffUsers() {
   const { data, error } = await supabase
@@ -21,6 +22,7 @@ export async function createStaffUser({ username, fullName, role, password }) {
     p_password: password,
   });
   if (error) throw new Error(error.message);
+  logAction('staff_created', { kind: 'staff_user', id: data?.id, payload: { username: data?.username, role: data?.role } });
   return data;
 }
 
@@ -30,6 +32,7 @@ export async function setStaffActive(id, isActive) {
     .update({ is_active: !!isActive })
     .eq('id', id);
   if (error) throw error;
+  logAction(isActive ? 'staff_activated' : 'staff_deactivated', { kind: 'staff_user', id });
 }
 
 export async function updateStaffRole(id, role) {
@@ -38,6 +41,7 @@ export async function updateStaffRole(id, role) {
     .update({ role })
     .eq('id', id);
   if (error) throw error;
+  logAction('staff_role_changed', { kind: 'staff_user', id, payload: { new_role: role } });
 }
 
 export async function resetStaffPassword(username, newPassword) {
@@ -46,4 +50,5 @@ export async function resetStaffPassword(username, newPassword) {
     p_new_password: newPassword,
   });
   if (error) throw new Error(error.message);
+  logAction('staff_password_reset', { kind: 'staff_user', id: username });
 }

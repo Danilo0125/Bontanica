@@ -8,6 +8,7 @@
 // El cobro se hace al enviar una tanda. La mesa se considera "ocupada" mientras
 // haya algún batch en estado paid (no delivered ni cancelled).
 import { supabase } from './supabase.js';
+import { logAction } from './auditApi.js';
 
 // ─── Orden por mesa (idempotente) ────────────────────────────────────────────
 export async function getOrCreateOpenOrder(tableId, serverId) {
@@ -67,6 +68,14 @@ export async function sendBatchPaid({ orderId, items, serverId, payment }) {
     await supabase.from('order_batches').update({ status: 'cancelled' }).eq('id', batch.id);
     throw itemsIns.error;
   }
+  logAction('batch_paid', {
+    kind: 'order_batch', id: batch.id,
+    payload: {
+      order_id: orderId, table_id: null, total,
+      payment_method: payment.method, item_count: items.length,
+      items: items.map(({ product, qty }) => ({ id: product.id, qty })),
+    },
+  });
   return { batch, items: itemsIns.data };
 }
 
@@ -83,6 +92,7 @@ export async function markBatchReady(batchId) {
     .update({ ready_at: now, last_notified_at: now })
     .eq('id', batchId);
   if (batchRes.error) throw batchRes.error;
+  logAction('batch_ready', { kind: 'order_batch', id: batchId });
 }
 
 // ─── Reenviar el aviso al mesero (botón "Volver a notificar" en cocina) ─────
@@ -91,6 +101,7 @@ export async function bumpBatchNotification(batchId) {
     .update({ last_notified_at: new Date().toISOString() })
     .eq('id', batchId);
   if (error) throw error;
+  logAction('batch_renotified', { kind: 'order_batch', id: batchId });
 }
 
 // ─── Marcar batch como entregado (mesero, después de "Listo" de cocina) ─────
@@ -99,6 +110,7 @@ export async function markBatchDelivered(batchId) {
     .update({ delivered_at: new Date().toISOString(), status: 'delivered' })
     .eq('id', batchId);
   if (error) throw error;
+  logAction('batch_delivered', { kind: 'order_batch', id: batchId });
 }
 
 // ─── Cancelar batch entero (cancela también sus items) ──────────────────────
@@ -108,6 +120,7 @@ export async function cancelBatch(batchId) {
   if (a.error) throw a.error;
   const b = await supabase.from('order_batches').update({ status: 'cancelled' }).eq('id', batchId);
   if (b.error) throw b.error;
+  logAction('batch_cancelled', { kind: 'order_batch', id: batchId });
 }
 
 // ─── Ajustes finos de items ─────────────────────────────────────────────────
@@ -126,6 +139,7 @@ export async function removeItem(itemId) {
 export async function closeOrder(orderId) {
   const { error } = await supabase.from('orders').update({ status: 'closed' }).eq('id', orderId);
   if (error) throw error;
+  logAction('order_closed', { kind: 'order', id: orderId });
 }
 
 // ─── Cancelar la orden entera (admin / mesa zombie) ─────────────────────────
@@ -139,6 +153,7 @@ export async function cancelOrder(orderId) {
   if (items.error) throw items.error;
   const ord = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId);
   if (ord.error) throw ord.error;
+  logAction('order_cancelled', { kind: 'order', id: orderId });
 }
 
 // ─── Lecturas ───────────────────────────────────────────────────────────────

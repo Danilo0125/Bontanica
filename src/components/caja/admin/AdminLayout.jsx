@@ -3,6 +3,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const TABS = [
   { to: '/caja/admin',           end: true,  label: 'Resumen' },
+  { to: '/caja/admin/analiticas',end: false, label: 'Analíticas' },
+  { to: '/caja/admin/actividad', end: false, label: 'Actividad' },
   { to: '/caja/admin/productos', end: false, label: 'Productos' },
   { to: '/caja/admin/combos',    end: false, label: 'Combos' },
   { to: '/caja/admin/reservas',  end: false, label: 'Reservas' },
