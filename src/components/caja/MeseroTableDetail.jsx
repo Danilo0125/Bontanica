@@ -13,6 +13,8 @@ import { money, formatTime, minutesSince } from '../../lib/format.js';
 import { ProductPicker } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
 import { useToast } from './Toasts.jsx';
+import { useDialog } from './Dialog.jsx';
+import { markBatchNotificationsRead } from '../../lib/notificationsApi.js';
 import { ChevronLeft, X, Eye, UtensilsCrossed, Check } from '../../lib/icons.jsx';
 
 const draftKey = (tableId) => `botanica_draft_mesa_${tableId}`;
@@ -50,6 +52,7 @@ export function MeseroTableDetail() {
   const { username, role } = useAuth();
   const isReadOnly = role === 'admin';
   const toast = useToast();
+  const dialog = useDialog();
   const { tables } = useTables();
   const { orders, refresh } = useOpenOrders(`mesero-table-${tableId}`);
 
@@ -156,6 +159,9 @@ export function MeseroTableDetail() {
   const onMarkDelivered = async (batch) => {
     try {
       await markBatchDelivered(batch.id);
+      // Limpia notifs viejas para este batch (no quieren ver "tanda lista" en la
+      // bandeja cuando ya la entregaron).
+      markBatchNotificationsRead(username, batch.id);
       toast.success('Entregado', {
         icon: <UtensilsCrossed size={22} strokeWidth={1.7} />,
         duration: 2500,
@@ -175,9 +181,18 @@ export function MeseroTableDetail() {
   };
 
   const onCancelBatch = async (batch) => {
-    if (!confirm(`¿Cancelar esta tanda? (${batch.items.length} items, ${money(batch.total)} Bs)`)) return;
+    const n = batch.items.length;
+    const itemsTxt = n === 1 ? '1 ítem' : `${n} ítems`;
+    const ok = await dialog.confirm({
+      title: '¿Cancelar esta tanda?',
+      message: `${itemsTxt} · ${money(batch.total)} Bs. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Sí, cancelar tanda',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
     try {
       await cancelBatch(batch.id);
+      markBatchNotificationsRead(username, batch.id);
       toast.info('Tanda cancelada');
       refresh();
     } catch (e) {
@@ -200,10 +215,13 @@ export function MeseroTableDetail() {
     return <div className="s-empty">Abriendo cuenta de {table?.name ?? `mesa ${tableId}`}…</div>;
   }
 
-  const sentItemsCount = (order?.items ?? []).filter((it) => it.status !== 'cancelled').length;
+  const sentItemsCount = (order?.items ?? [])
+    .filter((it) => it.status !== 'cancelled')
+    .reduce((s, it) => s + it.qty, 0);
   const accumulatedTotal = batches
     .filter((b) => b.status !== 'cancelled')
     .reduce((s, b) => s + Number(b.total), 0);
+  const itemsLabel = sentItemsCount === 1 ? '1 ítem enviado' : `${sentItemsCount} ítems enviados`;
 
   return (
     <div className="mesa-detail">
@@ -213,7 +231,7 @@ export function MeseroTableDetail() {
         </button>
         <div className="mesa-detail-title">
           <b>{table?.name ?? `Mesa ${tableId}`}</b>
-          <span>{sentItemsCount} ítems enviados · {money(accumulatedTotal)} Bs cobrados</span>
+          <span>{itemsLabel} · {money(accumulatedTotal)} Bs cobrados</span>
         </div>
         {orderId && !isReadOnly && (
           <button className="detail-cancel" onClick={() => setConfirmCancel(true)}

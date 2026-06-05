@@ -7,6 +7,7 @@ import {
 } from '../../../lib/staffApi.js';
 import { useAuth } from '../../../lib/auth.jsx';
 import { useToast } from '../Toasts.jsx';
+import { useDialog } from '../Dialog.jsx';
 
 const ROLE_LABEL = { admin: 'Admin', mesero: 'Mesero', cocina: 'Cocina' };
 const ROLE_OPTIONS = ['mesero', 'cocina', 'admin'];
@@ -17,6 +18,7 @@ export function StaffUsers() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const toast = useToast();
+  const dialog = useDialog();
 
   const load = async () => {
     setLoading(true);
@@ -52,9 +54,14 @@ export function StaffUsers() {
   };
 
   const onResetPw = async (u) => {
-    const newPw = window.prompt(`Nueva contraseña para ${u.full_name} (${u.username}):`, '');
+    const newPw = await dialog.prompt({
+      title: 'Nueva contraseña',
+      message: `Para ${u.full_name} (@${u.username})`,
+      placeholder: 'mínimo 4 caracteres',
+      minLength: 4,
+      confirmLabel: 'Resetear',
+    });
     if (!newPw) return;
-    if (newPw.length < 4) { toast.error('Mínimo 4 caracteres'); return; }
     try {
       await resetStaffPassword(u.username, newPw);
       toast.success(`Contraseña de ${u.username} reseteada`);

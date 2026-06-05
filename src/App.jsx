@@ -5,6 +5,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { PublicLayout } from './components/PublicLayout.jsx';
 import { ToastProvider } from './components/caja/Toasts.jsx';
+import { DialogProvider } from './components/caja/Dialog.jsx';
 import { AuthProvider } from './lib/auth.jsx';
 
 // Staff: cargado solo cuando el usuario entra a /caja/*
@@ -32,7 +33,7 @@ function Loading() {
 
 export function App() {
   return (
-    <AuthProvider><ToastProvider><BrowserRouter>
+    <AuthProvider><ToastProvider><DialogProvider><BrowserRouter>
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<PublicLayout />} />
@@ -73,6 +74,6 @@ export function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
-    </BrowserRouter></ToastProvider></AuthProvider>
+    </BrowserRouter></DialogProvider></ToastProvider></AuthProvider>
   );
 }

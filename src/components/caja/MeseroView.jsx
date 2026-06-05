@@ -10,8 +10,16 @@ const totalOf = (order) =>
   (order?.batches ?? []).filter((b) => b.status !== 'cancelled')
     .reduce((s, b) => s + Number(b.total), 0);
 
-const activeItems = (order) =>
-  (order?.items ?? []).filter((it) => it.status !== 'cancelled');
+// Items de tandas vivas (paid) — excluye delivered y cancelled. Esto evita
+// mostrar productos viejos en la preview/contador después de la entrega.
+const activeBatchIds = (order) => new Set(
+  (order?.batches ?? []).filter((b) => b.status === 'paid').map((b) => b.id)
+);
+
+const activeItems = (order) => {
+  const live = activeBatchIds(order);
+  return (order?.items ?? []).filter((it) => it.status !== 'cancelled' && live.has(it.batch_id));
+};
 
 const activeItemsCount = (order) =>
   activeItems(order).reduce((s, it) => s + it.qty, 0);
@@ -104,7 +112,15 @@ export function MeseroView() {
                   {ready && <Check size={13} strokeWidth={2.4} aria-hidden="true" />}
                   {ready ? 'Listo' : occupied ? 'Ocupada' : 'Libre'}
                 </span>
-                {occupied && <span className="mesa-mins">{mins}m</span>}
+                {occupied && (
+                  <span
+                    className="mesa-mins"
+                    style={mins > 180 ? { color: 'var(--s-crit)', fontWeight: 700 } : undefined}
+                    title={mins > 180 ? 'Hace más de 3 horas — revisar si la mesa sigue activa' : undefined}
+                  >
+                    {mins}m
+                  </span>
+                )}
               </div>
               <span className="mesa-name">{t.name}</span>
               {occupied ? (
@@ -117,7 +133,9 @@ export function MeseroView() {
                   </ul>
                   <div className="mesa-total-row">
                     <span className="mesa-total">{money(tot)}<small> Bs</small></span>
-                    <span className="mesa-count">{activeItemsCount(order)} ít.</span>
+                    <span className="mesa-count">
+                      {(() => { const c = activeItemsCount(order); return `${c} ${c === 1 ? 'ítem' : 'ítems'}`; })()}
+                    </span>
                   </div>
                 </>
               ) : (

@@ -1,10 +1,24 @@
 // ProtectedRoute.jsx — bloquea /caja/* sin sesión y verifica rol si se piden.
+import { useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../lib/auth.jsx';
+import { useToast } from './Toasts.jsx';
 
 export function ProtectedRoute({ children, allow }) {
   const loc = useLocation();
   const { profile, loading } = useAuth();
+  const toast = useToast();
+  const warned = useRef(false);
+
+  // Toast cuando el usuario intenta entrar a una ruta de otro rol. Se dispara
+  // post-render (effect) para evitar el warning de setState en render.
+  const isWrongRole = profile && allow && (Array.isArray(allow) ? allow : [allow]).includes(profile.role) === false;
+  useEffect(() => {
+    if (isWrongRole && !warned.current) {
+      warned.current = true;
+      toast.info(`Tu rol "${profile.role}" no tiene acceso a esa sección`);
+    }
+  }, [isWrongRole, profile?.role, toast]);
 
   if (loading) {
     return <div className="staff-shell"><div className="s-empty">Cargando…</div></div>;
@@ -14,12 +28,8 @@ export function ProtectedRoute({ children, allow }) {
     return <Navigate to="/caja" replace state={{ from: loc.pathname }} />;
   }
 
-  // allow = string | array | undefined. undefined = cualquier rol autenticado.
-  if (allow) {
-    const allowed = Array.isArray(allow) ? allow : [allow];
-    if (!allowed.includes(profile.role)) {
-      return <Navigate to={defaultPathForRole(profile.role)} replace />;
-    }
+  if (isWrongRole) {
+    return <Navigate to={defaultPathForRole(profile.role)} replace />;
   }
 
   return children;

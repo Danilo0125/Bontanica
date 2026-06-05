@@ -44,3 +44,15 @@ export async function markAllNotificationsRead(recipient) {
     .eq('is_read', false);
   if (error) throw error;
 }
+
+// Limpia notifs vivas de un batch (al entregarlo o cancelarlo). Evita que la
+// campana siga mostrando "Mesa X · tanda lista" cuando ya no aplica.
+export async function markBatchNotificationsRead(recipient, batchId) {
+  if (!recipient || !batchId) return;
+  const { error } = await supabase.from('notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq('recipient_username', recipient)
+    .eq('batch_id', batchId)
+    .eq('is_read', false);
+  if (error) console.warn('[notif] no se pudo limpiar:', error.message);
+}

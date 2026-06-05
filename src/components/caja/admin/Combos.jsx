@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { listCombos, createCombo, updateCombo, deleteCombo } from '../../../lib/comboApi.js';
 import { listAllProducts } from '../../../lib/productApi.js';
 import { useToast } from '../Toasts.jsx';
+import { useDialog } from '../Dialog.jsx';
 import { money } from '../../../lib/format.js';
 import { X } from '../../../lib/icons.jsx';
 
@@ -112,6 +113,7 @@ export function Combos() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const toast = useToast();
+  const dialog = useDialog();
 
   const load = async () => {
     try {
@@ -124,7 +126,13 @@ export function Combos() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
   const remove = async (combo) => {
-    if (!confirm(`¿Borrar "${combo.name}"?`)) return;
+    const ok = await dialog.confirm({
+      title: `¿Borrar combo?`,
+      message: `Se elimina "${combo.name}". Esta acción no se puede deshacer.`,
+      confirmLabel: 'Sí, borrar',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
     try { await deleteCombo(combo.id); toast.info('Combo eliminado'); load(); }
     catch (e) { toast.error(e.message); }
   };

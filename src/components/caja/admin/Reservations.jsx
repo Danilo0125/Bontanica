@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import { listReservations, createReservation, updateReservation, deleteReservation } from '../../../lib/reservationApi.js';
 import { useTables } from '../../../lib/useTables.js';
 import { useToast } from '../Toasts.jsx';
+import { useDialog } from '../Dialog.jsx';
 import { formatTime } from '../../../lib/format.js';
-import { getSession } from '../../../lib/cajaSession.js';
+import { useAuth } from '../../../lib/auth.jsx';
 
 const STATUS = {
   confirmed: 'Confirmada',
@@ -30,6 +31,7 @@ export function Reservations() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const toast = useToast();
+  const dialog = useDialog();
 
   const load = async () => {
     try {
@@ -50,7 +52,13 @@ export function Reservations() {
     catch (e) { toast.error(e.message); }
   };
   const remove = async (r) => {
-    if (!confirm(`¿Borrar reserva de ${r.customer_name}?`)) return;
+    const ok = await dialog.confirm({
+      title: '¿Borrar reserva?',
+      message: `Cliente: ${r.customer_name}. La acción no se puede deshacer.`,
+      confirmLabel: 'Sí, borrar',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
     try { await deleteReservation(r.id); toast.info('Reserva eliminada'); load(); }
     catch (e) { toast.error(e.message); }
   };

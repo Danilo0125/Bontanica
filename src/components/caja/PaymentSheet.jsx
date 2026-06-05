@@ -100,8 +100,17 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
                 </div>
               )}
             </div>
-            <button className="btn-primary" disabled={submitting} onClick={() => confirm('qr')}>
-              {submitting ? 'Cobrando…' : 'Marcar pagado y enviar a cocina'}
+            <button
+              className="btn-primary"
+              disabled={submitting || qrAvailable === false}
+              onClick={() => confirm('qr')}
+              title={qrAvailable === false ? 'Subí primero el QR del banco' : undefined}
+            >
+              {submitting
+                ? 'Cobrando…'
+                : qrAvailable === false
+                  ? 'Configurá el QR primero'
+                  : 'Marcar pagado y enviar a cocina'}
             </button>
           </>
         )}

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { listAllProducts, createProduct, updateProduct } from '../../../lib/productApi.js';
 import { uploadProductImage, deleteProductImageByUrl } from '../../../lib/storageApi.js';
 import { useToast } from '../Toasts.jsx';
+import { useDialog } from '../Dialog.jsx';
 import { Camera } from '../../../lib/icons.jsx';
 
 function NewProductModal({ onClose, onCreated, existingCategories }) {
@@ -129,6 +130,7 @@ export function Products() {
   const [modal, setModal] = useState(false);
   const [savingId, setSavingId] = useState(null);
   const toast = useToast();
+  const dialog = useDialog();
 
   const load = async () => {
     try {
@@ -175,7 +177,13 @@ export function Products() {
 
   const onRemoveImage = async (product) => {
     if (!product.image_url) return;
-    if (!confirm(`¿Quitar la imagen de "${product.name}"?`)) return;
+    const ok = await dialog.confirm({
+      title: '¿Quitar imagen?',
+      message: `Se elimina la foto de "${product.name}".`,
+      confirmLabel: 'Sí, quitar',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
     setSavingId(product.id);
     try {
       const oldUrl = product.image_url;

@@ -4,11 +4,13 @@ import { useOpenOrders } from '../../../lib/useOrders.js';
 import { cancelOrder } from '../../../lib/orderApi.js';
 import { supabase } from '../../../lib/supabase.js';
 import { useToast } from '../Toasts.jsx';
+import { useDialog } from '../Dialog.jsx';
 import { money, minutesSince } from '../../../lib/format.js';
 
 export function TablesAdmin() {
   const { orders, refresh } = useOpenOrders('admin-tables');
   const toast = useToast();
+  const dialog = useDialog();
   const [busy, setBusy] = useState({});
 
   const [allTables, setAllTables] = useState([]);
@@ -24,7 +26,13 @@ export function TablesAdmin() {
   const liberar = async (table) => {
     const o = orderByTable.get(table.id);
     if (!o) return;
-    if (!confirm(`¿Liberar ${table.name}? Se cancela la orden abierta y todos sus batches pendientes.`)) return;
+    const ok = await dialog.confirm({
+      title: `¿Liberar ${table.name}?`,
+      message: 'Se cancela la orden abierta y todos sus batches pendientes.',
+      confirmLabel: 'Sí, liberar',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
     try {
       setBusy((b) => ({ ...b, [table.id]: true }));
       await cancelOrder(o.id);
