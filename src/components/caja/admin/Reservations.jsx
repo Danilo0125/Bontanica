@@ -129,6 +129,7 @@ function NewReservationModal({ tables, onClose, onSaved }) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { username } = useAuth();
 
   const submit = async (e) => {
     e.preventDefault();
@@ -139,7 +140,7 @@ function NewReservationModal({ tables, onClose, onSaved }) {
       await createReservation({
         table_id: tableId, customer_name: name.trim(), customer_phone: phone.trim() || null,
         party_size: partySize, reserved_at, duration_minutes: duration,
-        notes: notes.trim() || null, created_by: getSession()?.server ?? null,
+        notes: notes.trim() || null, created_by: username ?? null,
       });
       toast.success('Reserva creada');
       onSaved();

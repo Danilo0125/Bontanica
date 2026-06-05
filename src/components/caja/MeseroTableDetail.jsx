@@ -8,7 +8,7 @@ import {
   getOrCreateOpenOrder, sendBatchPaid, markBatchDelivered,
   cancelBatch, cancelOrder, closeOrder,
 } from '../../lib/orderApi.js';
-import { getSession } from '../../lib/cajaSession.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { money, formatTime, minutesSince } from '../../lib/format.js';
 import { ProductPicker } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
@@ -46,7 +46,8 @@ function effectiveBatchStatus(batch, items) {
 export function MeseroTableDetail() {
   const { tableId } = useParams();
   const navigate = useNavigate();
-  const session = getSession();
+  const { username, role } = useAuth();
+  const isReadOnly = role === 'admin';
   const toast = useToast();
   const { tables } = useTables();
   const { orders, refresh } = useOpenOrders(`mesero-table-${tableId}`);
@@ -70,17 +71,22 @@ export function MeseroTableDetail() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!session?.server || !tableId) return;
+      if (!username || !tableId) return;
+      if (isReadOnly) {
+        // Admin solo observa: no abre orden si no existe.
+        setOpening(false);
+        return;
+      }
       try {
         setOpening(true);
-        const o = await getOrCreateOpenOrder(Number(tableId), session.server);
+        const o = await getOrCreateOpenOrder(Number(tableId), username);
         if (!cancelled) { setOrderId(o.id); refresh(); }
       } catch (e) {
         if (!cancelled) { setError(e.message ?? String(e)); toast.error('No pude abrir la mesa'); }
       } finally { if (!cancelled) setOpening(false); }
     })();
     return () => { cancelled = true; };
-  }, [tableId, session?.server, refresh, toast]);
+  }, [tableId, username, refresh, toast]);
 
   const batches = useMemo(() => {
     if (!order) return [];
@@ -132,7 +138,7 @@ export function MeseroTableDetail() {
       await sendBatchPaid({
         orderId,
         items: draftItems,
-        serverId: session.server,
+        serverId: username,
         payment: { method, received_amount },
       });
       setDraft({});
@@ -185,7 +191,7 @@ export function MeseroTableDetail() {
     } catch (e) { toast.error(`Error: ${e.message ?? e}`); setConfirmCancel(false); }
   };
 
-  if (!session) return null;
+  if (!username) return null;
   if (opening && !orderId) {
     return <div className="s-empty">Abriendo cuenta de {table?.name ?? `mesa ${tableId}`}…</div>;
   }
@@ -203,11 +209,20 @@ export function MeseroTableDetail() {
           <b>{table?.name ?? `Mesa ${tableId}`}</b>
           <span>{sentItemsCount} ítems enviados · {money(accumulatedTotal)} Bs cobrados</span>
         </div>
-        {orderId && (
+        {orderId && !isReadOnly && (
           <button className="detail-cancel" onClick={() => setConfirmCancel(true)}
                   aria-label="Cancelar mesa completa" title="Cancelar mesa completa">✕</button>
         )}
       </header>
+
+      {isReadOnly && (
+        <div style={{
+          background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10,
+          padding: '8px 12px', fontSize: 13, color: '#92400e', marginBottom: 12,
+        }}>
+          👁 Modo solo lectura — admin no puede tomar pedidos ni entregar
+        </div>
+      )}
 
       {batches.length > 0 && (
         <section>
@@ -233,12 +248,12 @@ export function MeseroTableDetail() {
                     </li>
                   ))}
                 </ul>
-                {eff === 'ready' && (
+                {!isReadOnly && eff === 'ready' && (
                   <button className="btn-primary batch-deliver" onClick={() => onMarkDelivered(b)}>
                     🍽 Marcar entregado
                   </button>
                 )}
-                {eff === 'paid' && (
+                {!isReadOnly && eff === 'paid' && (
                   <button className="batch-cancel" onClick={() => onCancelBatch(b)}>
                     Cancelar tanda
                   </button>
@@ -249,16 +264,18 @@ export function MeseroTableDetail() {
         </section>
       )}
 
-      <section>
-        <h2 className="s-h2">Agregar a la cuenta</h2>
-        <ProductPicker
-          draft={Object.fromEntries(draftItems.map(({ product, qty }) => [product.id, qty]))}
-          onAdd={addToDraft}
-          onDec={decFromDraft}
-        />
-      </section>
+      {!isReadOnly && (
+        <section>
+          <h2 className="s-h2">Agregar a la cuenta</h2>
+          <ProductPicker
+            draft={Object.fromEntries(draftItems.map(({ product, qty }) => [product.id, qty]))}
+            onAdd={addToDraft}
+            onDec={decFromDraft}
+          />
+        </section>
+      )}
 
-      {draftItems.length > 0 && (
+      {!isReadOnly && draftItems.length > 0 && (
         <div className="draft-bar">
           <div className="draft-info">
             <span>Tanda nueva</span>

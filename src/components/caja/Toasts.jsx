@@ -47,21 +47,40 @@ export function ToastProvider({ children }) {
     <ToastCtx.Provider value={value}>
       {children}
       <div className="toasts" role="region" aria-live="polite" aria-label="Notificaciones">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.kind ?? 'info'}`} role="status">
-            {t.icon && <span className="toast-icon" aria-hidden="true">{t.icon}</span>}
-            <div className="toast-body">
-              {t.title && <strong className="toast-title">{t.title}</strong>}
-              <span className="toast-msg">{t.message}</span>
+        {toasts.map((t) => {
+          const clickable = typeof t.onClick === 'function';
+          const handleClick = clickable ? () => { t.onClick(); dismiss(t.id); } : undefined;
+          return (
+            <div
+              key={t.id}
+              className={`toast toast--${t.kind ?? 'info'}${clickable ? ' is-clickable' : ''}`}
+              role={clickable ? 'button' : 'status'}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={handleClick}
+              onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } } : undefined}
+            >
+              {t.icon && <span className="toast-icon" aria-hidden="true">{t.icon}</span>}
+              <div className="toast-body">
+                {t.title && <strong className="toast-title">{t.title}</strong>}
+                <span className="toast-msg">{t.message}</span>
+                {clickable && <span className="toast-hint">Tocá para ver la mesa →</span>}
+              </div>
+              {t.action && (
+                <button
+                  className="toast-action"
+                  onClick={(e) => { e.stopPropagation(); t.action.onClick?.(); dismiss(t.id); }}
+                >
+                  {t.action.label}
+                </button>
+              )}
+              <button
+                className="toast-close"
+                onClick={(e) => { e.stopPropagation(); dismiss(t.id); }}
+                aria-label="Cerrar"
+              >×</button>
             </div>
-            {t.action && (
-              <button className="toast-action" onClick={() => { t.action.onClick?.(); dismiss(t.id); }}>
-                {t.action.label}
-              </button>
-            )}
-            <button className="toast-close" onClick={() => dismiss(t.id)} aria-label="Cerrar">×</button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </ToastCtx.Provider>
   );

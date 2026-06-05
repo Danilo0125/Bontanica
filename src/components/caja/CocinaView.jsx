@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOpenOrders } from '../../lib/useOrders.js';
 import { useTables } from '../../lib/useTables.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { markBatchReady, bumpBatchNotification } from '../../lib/orderApi.js';
 import { formatTime, minutesSince } from '../../lib/format.js';
 import { isAudioOn, setAudioOn, ensureAudioCtx, playBeep } from '../../lib/audio.js';
@@ -58,6 +59,8 @@ function buildQueue(orders, tablesById) {
 export function CocinaView() {
   const { orders, loading, error } = useOpenOrders('cocina-orders');
   const { tables } = useTables();
+  const { role } = useAuth();
+  const isReadOnly = role === 'admin';
   const toast = useToast();
   const [busy, setBusy] = useState({});
   const [confirmId, setConfirmId] = useState(null);
@@ -139,6 +142,14 @@ export function CocinaView() {
         </button>
       </h1>
       <p className="s-sub">Las tandas listas se quedan acá hasta que el mesero las entregue. Si no las recoge, tocá 🔔 para volver a avisar.</p>
+      {isReadOnly && (
+        <div style={{
+          background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10,
+          padding: '8px 12px', fontSize: 13, color: '#92400e', marginBottom: 12,
+        }}>
+          👁 Modo solo lectura — admin no puede marcar tandas listas ni reenviar avisos
+        </div>
+      )}
 
       {queue.length === 0 ? (
         <div className="cocina-empty">
@@ -182,7 +193,7 @@ export function CocinaView() {
                     </li>
                   ))}
                 </ul>
-                {isReady ? (
+                {!isReadOnly && isReady && (
                   <button
                     className="btn-listo"
                     style={{ background: '#fff', color: '#3f6212', border: '1.5px solid #3f6212' }}
@@ -191,7 +202,8 @@ export function CocinaView() {
                   >
                     {busy[b.id] ? 'Enviando…' : '🔔 Volver a notificar al mesero'}
                   </button>
-                ) : (
+                )}
+                {!isReadOnly && !isReady && (
                   <button className="btn-listo" disabled={!!busy[b.id]} onClick={() => setConfirmId(b.id)}>
                     {busy[b.id] ? 'Marcando…' : '✓ Listo'}
                   </button>

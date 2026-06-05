@@ -1,32 +1,12 @@
-// cajaSession.js — sesión local de Caja (password gate compartido + selector).
-// Persistencia simple en localStorage. NO es auth real — el password viaja al
-// cliente y vive en bundle. Mitigación social, no de seguridad.
+// cajaSession.js — DEPRECATED.
+// El password-gate compartido fue reemplazado por Supabase Auth real.
+// Usar `useAuth()` de `src/lib/auth.jsx` en su lugar.
+//
+// Este archivo se conserva temporalmente para evitar errores si quedó algún
+// import suelto; todos los exports son no-ops. Eliminar en una limpieza futura.
 
-const STORAGE_KEY = 'botanica_caja_session';
-export const CAJA_PASSWORD = '87654321';
-
-export function getSession() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.server) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export function setSession({ server }) {
-  const payload = { server, loggedAt: new Date().toISOString() };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  return payload;
-}
-
-export function clearSession() {
-  localStorage.removeItem(STORAGE_KEY);
-}
-
-export function isAuthed() {
-  return getSession() !== null;
-}
+export function getSession() { return null; }
+export function setSession() { return null; }
+export function clearSession() {}
+export function isAuthed() { return false; }
+export const CAJA_PASSWORD = null;

@@ -3,19 +3,29 @@
 // Badge en Cocina cuenta las tandas pendientes en tiempo real.
 import { useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { clearSession, getSession } from '../../lib/cajaSession.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { useOpenOrders } from '../../lib/useOrders.js';
 import { ensureAudioCtx, playBeep } from '../../lib/audio.js';
 import { useTables } from '../../lib/useTables.js';
 import { useToast } from './Toasts.jsx';
+import { createNotification } from '../../lib/notificationsApi.js';
+import { NotificationsTray } from './NotificationsTray.jsx';
 
-const NAME_MAP = { ochito: 'Ochito', nath: 'Nath' };
+function vibrate(pattern) {
+  try { navigator.vibrate?.(pattern); } catch {}
+}
 
 const ICONS = {
   mesero: 'M4 7h16v12H4zM4 7l2-3h12l2 3M9 12h6',
   cocina: 'M7 3v6a3 3 0 0 0 6 0V3M10 3v18M17 3c-1.5 1-2 3-2 5s.5 4 2 5v8',
   admin:  'M4 19V9l8-5 8 5v10M9 19v-6h6v6',
 };
+
+const ALL_NAV = [
+  { to: '/caja/mesero', label: 'Mesero', icon: ICONS.mesero, roles: ['mesero', 'admin'] },
+  { to: '/caja/cocina', label: 'Cocina', icon: ICONS.cocina, roles: ['cocina', 'admin'] },
+  { to: '/caja/admin',  label: 'Admin',  icon: ICONS.admin,  roles: ['admin'] },
+];
 
 function countPending(orders) {
   let n = 0;
@@ -37,7 +47,7 @@ function countPending(orders) {
 export function CajaLayout() {
   const loc = useLocation();
   const navigate = useNavigate();
-  const session = getSession();
+  const { username, role, fullName, signOut } = useAuth();
   const { orders, loading: ordersLoading } = useOpenOrders('layout-pending');
   const { tables } = useTables();
   const toast = useToast();
@@ -55,13 +65,13 @@ export function CajaLayout() {
   // ruta del staff (mesero, cocina, admin). Filtramos por server_id para que
   // cada mesero escuche solo lo suyo. La detección usa last_notified_at del
   // batch, que cocina bumpea al marcar listo y al tocar "Volver a notificar".
+  // Admin no recibe avisos: solo observa.
   const lastNotifiedRef = useRef(new Map()); // batchId -> last_notified_at iso
   const seededRef = useRef(false);
   useEffect(() => {
-    // No seedeamos contra una lista parcial — esperamos al primer fetch completo
-    // para evitar que las tandas pre-existentes vuelvan a sonar al recargar.
     if (ordersLoading) return;
-    const currentServer = session?.server;
+    if (role === 'admin') return; // admin no recibe avisos
+    const currentServer = username;
     if (!currentServer) return;
     const tableNameById = new Map(tables.map((t) => [t.id, t.name]));
     const fresh = new Map();
@@ -82,33 +92,40 @@ export function CajaLayout() {
     if (!seededRef.current) { seededRef.current = true; return; }
     for (const n of newNotifications) {
       playBeep('delivered');
+      vibrate([220, 120, 220, 120, 320]);
       const tableName = tableNameById.get(n.tableId) ?? `Mesa ${n.tableId}`;
-      toast.ready(`${tableName} · tanda lista para entregar`, {
+      const message = `${tableName} · tanda lista para entregar`;
+      toast.ready(message, {
         icon: '🍽️',
         title: 'Pedido listo',
-        action: {
-          label: 'Ver mesa',
-          onClick: () => navigate(`/caja/mesero/${n.tableId}`),
-        },
+        onClick: () => navigate(`/caja/mesero/${n.tableId}`),
       });
+      // Persistimos en la bandeja para que sobreviva al refresh y a la pestaña cerrada.
+      createNotification({
+        recipient: currentServer,
+        kind: 'ready',
+        title: 'Pedido listo',
+        message,
+        tableId: n.tableId,
+        batchId: n.batchId,
+      }).catch(() => {});
     }
-  }, [orders, ordersLoading, tables, session?.server, toast, navigate]);
+  }, [orders, ordersLoading, tables, role, username, toast, navigate]);
 
   const isCocina = loc.pathname.startsWith('/caja/cocina');
   const isAdmin = loc.pathname.startsWith('/caja/admin');
   const where = isAdmin ? 'Admin' : isCocina ? 'Cocina' : 'Mesero';
   const pending = countPending(orders);
 
-  const logout = () => {
-    clearSession();
+  const logout = async () => {
+    await signOut();
     navigate('/caja', { replace: true });
   };
 
-  const NAV = [
-    { to: '/caja/mesero', label: 'Mesero', icon: ICONS.mesero },
-    { to: '/caja/cocina', label: 'Cocina', icon: ICONS.cocina, badge: pending },
-    { to: '/caja/admin',  label: 'Admin',  icon: ICONS.admin },
-  ];
+  // Filtrar NavLinks por rol: cada uno ve solo lo suyo (admin ve los 3).
+  const NAV = ALL_NAV
+    .filter((n) => !role || n.roles.includes(role))
+    .map((n) => (n.to === '/caja/cocina' ? { ...n, badge: pending } : n));
 
   return (
     <div className="staff-shell">
@@ -121,9 +138,10 @@ export function CajaLayout() {
           </div>
         </div>
         <div className="staff-who">
+          {role !== 'admin' && <NotificationsTray recipient={username} />}
           <div className="staff-who-id">
-            <b>{NAME_MAP[session?.server] ?? '—'}</b>
-            <span>en {where}</span>
+            <b>{fullName ?? '—'}</b>
+            <span>{role ? `${role} · ${where}` : `en ${where}`}</span>
           </div>
           <button className="staff-out" onClick={logout}>Salir</button>
         </div>

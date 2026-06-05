@@ -1,41 +1,39 @@
-// CajaGate.jsx — pantalla de login (password + selector de mesero). Tema blanco.
+// CajaGate.jsx — pantalla de login con username + password (Auth real).
 import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { CAJA_PASSWORD, isAuthed, setSession } from '../../lib/cajaSession.js';
+import { Link, Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../lib/auth.jsx';
 import { ensureAudioCtx } from '../../lib/audio.js';
 
-const SERVERS = [
-  { id: 'ochito', label: 'Ochito' },
-  { id: 'nath',   label: 'Nath' },
-];
-
 export function CajaGate() {
-  const [step, setStep] = useState(isAuthed() ? 'done' : 'password');
-  const [pw, setPw] = useState('');
+  const { signIn, profile, loading } = useAuth();
+  const loc = useLocation();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
 
-  if (step === 'done' || isAuthed()) {
-    return <Navigate to="/caja/mesero" replace />;
+  if (loading) {
+    return <div className="staff-shell"><div className="staff-gate"><p className="gate-sub">Cargando…</p></div></div>;
   }
 
-  const submitPassword = (e) => {
-    e.preventDefault();
-    // Aprovechamos este user gesture para desbloquear el AudioContext (iOS/Safari).
-    ensureAudioCtx();
-    if (pw === CAJA_PASSWORD) {
-      setError(null);
-      setStep('server');
-    } else {
-      setError('Contraseña incorrecta');
-    }
-  };
+  if (profile?.is_active) {
+    const from = loc.state?.from && loc.state.from !== '/caja' ? loc.state.from : null;
+    return <Navigate to={from ?? defaultRouteForRole(profile.role)} replace />;
+  }
 
-  const pickServer = (id) => {
-    // Segundo user gesture — garantía extra para que los beeps anden en móvil.
-    ensureAudioCtx();
-    setSession({ server: id });
-    navigate('/caja/mesero', { replace: true });
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    ensureAudioCtx(); // desbloquear audio en este user gesture
+    if (!username.trim() || !password) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await signIn(username, password);
+    } catch (err) {
+      setError(err.message ?? 'No pude iniciar sesión');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -45,39 +43,43 @@ export function CajaGate() {
         <div className="gate-leaf" aria-hidden="true">🌿</div>
         <h1 className="gate-title">Personal · Botánica</h1>
         <p className="gate-sub">Acceso a caja, cocina y administración</p>
-        {step === 'password' && (
-          <form onSubmit={submitPassword} className="gate-form">
-            <label className="field">
-              <span>Contraseña</span>
-              <input
-                type="password"
-                inputMode="numeric"
-                autoFocus
-                value={pw}
-                onChange={(e) => { setPw(e.target.value); setError(null); }}
-                placeholder="••••••••"
-              />
-            </label>
-            {error && <p className="gate-error">{error}</p>}
-            <button type="submit" className="btn-primary" disabled={!pw}>
-              Continuar
-            </button>
-          </form>
-        )}
-        {step === 'server' && (
-          <div className="gate-form">
-            <p className="s-sub" style={{ textAlign: 'center', marginBottom: 4 }}>¿Quién está atendiendo?</p>
-            <div className="gate-servers">
-              {SERVERS.map((s) => (
-                <button key={s.id} className="gate-server" onClick={() => pickServer(s.id)}>
-                  <span className="gate-server-ini">{s.label[0]}</span>
-                  <span className="gate-server-name">{s.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <form onSubmit={onSubmit} className="gate-form">
+          <label className="field">
+            <span>Usuario</span>
+            <input
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoFocus
+              value={username}
+              onChange={(e) => { setUsername(e.target.value); setError(null); }}
+              placeholder="ej. ochito"
+            />
+          </label>
+          <label className="field">
+            <span>Contraseña</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(null); }}
+              placeholder="••••••••"
+            />
+          </label>
+          {error && <p className="gate-error" role="alert">{error}</p>}
+          <button type="submit" className="btn-primary" disabled={!username.trim() || !password || submitting}>
+            {submitting ? 'Entrando…' : 'Entrar'}
+          </button>
+        </form>
       </div>
     </div>
   );
+}
+
+export function defaultRouteForRole(role) {
+  if (role === 'mesero') return '/caja/mesero';
+  if (role === 'cocina') return '/caja/cocina';
+  if (role === 'admin')  return '/caja/admin';
+  return '/caja';
 }

@@ -14,5 +14,9 @@ if (!url || !anonKey) {
 
 export const supabase = createClient(url ?? '', anonKey ?? '', {
   realtime: { params: { eventsPerSecond: 5 } },
-  auth: { persistSession: false },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storageKey: 'botanica_auth',
+  },
 });

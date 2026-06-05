@@ -7,6 +7,7 @@ const TABS = [
   { to: '/caja/admin/combos',    end: false, label: 'Combos' },
   { to: '/caja/admin/reservas',  end: false, label: 'Reservas' },
   { to: '/caja/admin/mesas',     end: false, label: 'Mesas' },
+  { to: '/caja/admin/usuarios',  end: false, label: 'Usuarios' },
 ];
 
 export function AdminLayout() {
