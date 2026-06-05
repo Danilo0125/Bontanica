@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { listAllProducts, createProduct, updateProduct } from '../../../lib/productApi.js';
 import { uploadProductImage, deleteProductImageByUrl } from '../../../lib/storageApi.js';
 import { useToast } from '../Toasts.jsx';
+import { Camera } from '../../../lib/icons.jsx';
 
 function NewProductModal({ onClose, onCreated, existingCategories }) {
   const [name, setName] = useState('');
@@ -110,7 +111,7 @@ function ProdPhoto({ product, disabled, onUpload, onRemove }) {
               aria-label={product.image_url ? 'Cambiar imagen' : 'Subir imagen'}>
         {product.image_url
           ? <img src={product.image_url} alt={product.name} loading="lazy" />
-          : <span className="prod-photo-placeholder">📷</span>}
+          : <span className="prod-photo-placeholder"><Camera size={26} strokeWidth={1.6} /></span>}
         {uploading && <span className="prod-photo-uploading">…</span>}
       </button>
       {product.image_url && !uploading && (

@@ -13,6 +13,7 @@ import { money, formatTime, minutesSince } from '../../lib/format.js';
 import { ProductPicker } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
 import { useToast } from './Toasts.jsx';
+import { ChevronLeft, X, Eye, UtensilsCrossed, Check } from '../../lib/icons.jsx';
 
 const draftKey = (tableId) => `botanica_draft_mesa_${tableId}`;
 function loadDraft(tableId) {
@@ -29,10 +30,10 @@ function saveDraft(tableId, draft) {
 }
 
 const BATCH_STATUS_LABEL = {
-  paid:      { pill: 'Pagado · cocinando', cls: 'paid' },
-  ready:     { pill: '✓ Listo para entregar', cls: 'ready' },
-  delivered: { pill: 'Entregado', cls: 'delivered' },
-  cancelled: { pill: 'Cancelado', cls: 'cancelled' },
+  paid:      { pill: 'Pagado · cocinando',   cls: 'paid' },
+  ready:     { pill: 'Listo para entregar',  cls: 'ready' },
+  delivered: { pill: 'Entregado',            cls: 'delivered' },
+  cancelled: { pill: 'Cancelado',            cls: 'cancelled' },
 };
 
 function effectiveBatchStatus(batch, items) {
@@ -144,7 +145,7 @@ export function MeseroTableDetail() {
       setDraft({});
       saveDraft(tableId, {});
       setPaySheetOpen(false);
-      toast.success(`Tanda enviada a cocina · ${money(draftTotal)} Bs cobrados`, { icon: '✓' });
+      toast.success(`Tanda enviada a cocina · ${money(draftTotal)} Bs cobrados`);
       refresh();
     } catch (e) {
       setError(e.message ?? String(e));
@@ -155,7 +156,10 @@ export function MeseroTableDetail() {
   const onMarkDelivered = async (batch) => {
     try {
       await markBatchDelivered(batch.id);
-      toast.success('Entregado', { icon: '🍽', duration: 2500 });
+      toast.success('Entregado', {
+        icon: <UtensilsCrossed size={22} strokeWidth={1.7} />,
+        duration: 2500,
+      });
       refresh();
       const remaining = batches.filter(
         (b) => b.id !== batch.id && b.status !== 'delivered' && b.status !== 'cancelled'
@@ -204,14 +208,18 @@ export function MeseroTableDetail() {
   return (
     <div className="mesa-detail">
       <header className="mesa-detail-head">
-        <button className="detail-back" onClick={() => navigate('/caja/mesero')} aria-label="Volver">←</button>
+        <button className="detail-back" onClick={() => navigate('/caja/mesero')} aria-label="Volver">
+          <ChevronLeft size={22} strokeWidth={1.8} />
+        </button>
         <div className="mesa-detail-title">
           <b>{table?.name ?? `Mesa ${tableId}`}</b>
           <span>{sentItemsCount} ítems enviados · {money(accumulatedTotal)} Bs cobrados</span>
         </div>
         {orderId && !isReadOnly && (
           <button className="detail-cancel" onClick={() => setConfirmCancel(true)}
-                  aria-label="Cancelar mesa completa" title="Cancelar mesa completa">✕</button>
+                  aria-label="Cancelar mesa completa" title="Cancelar mesa completa">
+            <X size={18} strokeWidth={2} />
+          </button>
         )}
       </header>
 
@@ -219,8 +227,10 @@ export function MeseroTableDetail() {
         <div style={{
           background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10,
           padding: '8px 12px', fontSize: 13, color: '#92400e', marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          👁 Modo solo lectura — admin no puede tomar pedidos ni entregar
+          <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
+          Modo solo lectura — admin no puede tomar pedidos ni entregar
         </div>
       )}
 
@@ -249,8 +259,12 @@ export function MeseroTableDetail() {
                   ))}
                 </ul>
                 {!isReadOnly && eff === 'ready' && (
-                  <button className="btn-primary batch-deliver" onClick={() => onMarkDelivered(b)}>
-                    🍽 Marcar entregado
+                  <button
+                    className="btn-primary batch-deliver"
+                    onClick={() => onMarkDelivered(b)}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                  >
+                    <UtensilsCrossed size={18} strokeWidth={1.7} aria-hidden="true" /> Marcar entregado
                   </button>
                 )}
                 {!isReadOnly && eff === 'paid' && (

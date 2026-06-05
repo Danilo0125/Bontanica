@@ -2,6 +2,15 @@
 // Provider + hook useToast(). Renderizado a nivel App, no por-vista,
 // para que las notificaciones sigan visibles aunque cambies de ruta.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { UtensilsCrossed, Check, AlertTriangle, Info, Bell } from '../../lib/icons.jsx';
+
+// Ícono default según `kind` cuando el caller no pasa uno explícito.
+const DEFAULT_ICON_BY_KIND = {
+  ready:   <UtensilsCrossed size={22} strokeWidth={1.7} />,
+  success: <Check          size={22} strokeWidth={2} />,
+  error:   <AlertTriangle  size={22} strokeWidth={1.8} />,
+  info:    <Info           size={22} strokeWidth={1.8} />,
+};
 
 const ToastCtx = createContext(null);
 
@@ -59,7 +68,10 @@ export function ToastProvider({ children }) {
               onClick={handleClick}
               onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } } : undefined}
             >
-              {t.icon && <span className="toast-icon" aria-hidden="true">{t.icon}</span>}
+              {(() => {
+                const ico = t.icon ?? DEFAULT_ICON_BY_KIND[t.kind ?? 'info'];
+                return ico ? <span className="toast-icon" aria-hidden="true">{ico}</span> : null;
+              })()}
               <div className="toast-body">
                 {t.title && <strong className="toast-title">{t.title}</strong>}
                 <span className="toast-msg">{t.message}</span>

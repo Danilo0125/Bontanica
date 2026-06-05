@@ -2,6 +2,7 @@
 // Emite onConfirm con { method, received_amount } y deja al caller la persistencia.
 import { useEffect, useState } from 'react';
 import { money } from '../../lib/format.js';
+import { Banknote, Smartphone, AlertTriangle } from '../../lib/icons.jsx';
 
 const QR_PATH = '/assets/qr-pago.png';
 function useQrAvailability() {
@@ -42,10 +43,10 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
             {contextLabel && <p className="s-sheet-sub">{contextLabel} · elegí el método de pago</p>}
             <div className="pay-methods">
               <button className="pay-opt" onClick={() => setStep('efectivo')}>
-                <span className="pay-ico">💵</span><span>Efectivo</span>
+                <span className="pay-ico"><Banknote size={26} strokeWidth={1.6} /></span><span>Efectivo</span>
               </button>
               <button className="pay-opt" onClick={() => setStep('qr')}>
-                <span className="pay-ico">📱</span><span>QR / Transferencia</span>
+                <span className="pay-ico"><Smartphone size={26} strokeWidth={1.6} /></span><span>QR / Transferencia</span>
               </button>
             </div>
           </>
@@ -90,7 +91,9 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
               )}
               {qrAvailable === false && (
                 <div className="qr-pending">
-                  <span className="qr-pending-icon" aria-hidden="true">⚠️</span>
+                  <span className="qr-pending-icon" aria-hidden="true">
+                    <AlertTriangle size={28} strokeWidth={1.7} />
+                  </span>
                   <strong>QR aún no configurado</strong>
                   <p>Mostrá el QR impreso del banco y verificá el comprobante.<br/>
                   <small>Para automatizarlo: guardar PNG en <code>public/assets/qr-pago.png</code>.</small></p>

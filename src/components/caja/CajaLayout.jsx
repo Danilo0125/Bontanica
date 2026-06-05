@@ -11,6 +11,7 @@ import { useToast } from './Toasts.jsx';
 import { createNotification } from '../../lib/notificationsApi.js';
 import { NotificationsTray } from './NotificationsTray.jsx';
 import { PwaPrompt } from './PwaPrompt.jsx';
+import { Leaf, UtensilsCrossed } from '../../lib/icons.jsx';
 
 function vibrate(pattern) {
   try { navigator.vibrate?.(pattern); } catch {}
@@ -97,7 +98,6 @@ export function CajaLayout() {
       const tableName = tableNameById.get(n.tableId) ?? `Mesa ${n.tableId}`;
       const message = `${tableName} · tanda lista para entregar`;
       toast.ready(message, {
-        icon: '🍽️',
         title: 'Pedido listo',
         onClick: () => navigate(`/caja/mesero/${n.tableId}`),
       });
@@ -132,7 +132,9 @@ export function CajaLayout() {
     <div className="staff-shell">
       <header className="staff-top">
         <div className="staff-brand">
-          <span className="leaf" aria-hidden="true">🌿</span>
+          <span className="leaf" aria-hidden="true">
+            <Leaf size={20} strokeWidth={1.6} />
+          </span>
           <div className="staff-brand-text">
             <b>BOTÁNICA</b>
             <span>Área de personal</span>

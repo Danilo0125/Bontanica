@@ -4,6 +4,7 @@ import { listCombos, createCombo, updateCombo, deleteCombo } from '../../../lib/
 import { listAllProducts } from '../../../lib/productApi.js';
 import { useToast } from '../Toasts.jsx';
 import { money } from '../../../lib/format.js';
+import { X } from '../../../lib/icons.jsx';
 
 function ComboModal({ initial, products, onClose, onSaved }) {
   const isEdit = !!initial?.id;
@@ -80,7 +81,9 @@ function ComboModal({ initial, products, onClose, onSaved }) {
                   <input type="number" min="1" step="1" value={line.qty}
                     onChange={(e) => setLine(idx, { qty: Number(e.target.value) || 1 })} />
                 </div>
-                <button type="button" className="icon-del" onClick={() => removeLine(idx)} aria-label="Quitar">✕</button>
+                <button type="button" className="icon-del" onClick={() => removeLine(idx)} aria-label="Quitar">
+                  <X size={16} strokeWidth={2} />
+                </button>
               </div>
             ))}
           <button type="button" className="btn-ghost" onClick={addLine}>+ Agregar producto</button>

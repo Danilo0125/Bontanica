@@ -8,6 +8,7 @@ import { markBatchReady, bumpBatchNotification } from '../../lib/orderApi.js';
 import { formatTime, minutesSince } from '../../lib/format.js';
 import { isAudioOn, setAudioOn, ensureAudioCtx, playBeep } from '../../lib/audio.js';
 import { useToast } from './Toasts.jsx';
+import { Bell, BellOff, Leaf, Check, Eye } from '../../lib/icons.jsx';
 
 const NAME_MAP = { ochito: 'Ochito', nath: 'Nath' };
 
@@ -113,7 +114,10 @@ export function CocinaView() {
     setBusy((b) => ({ ...b, [batchId]: true }));
     try {
       await bumpBatchNotification(batchId);
-      toast.info('Aviso reenviado al mesero', { duration: 2500, icon: '🔔' });
+      toast.info('Aviso reenviado al mesero', {
+        duration: 2500,
+        icon: <Bell size={22} strokeWidth={1.7} />,
+      });
     } catch (e) {
       toast.error(`No se pudo reenviar: ${e.message ?? e}`);
     } finally {
@@ -138,22 +142,26 @@ export function CocinaView() {
         <button className="audio-toggle" onClick={toggleAudio}
                 aria-label={audioOn ? 'Silenciar' : 'Activar avisos sonoros'}
                 title={audioOn ? 'Sonido activo' : 'Silenciado'}>
-          {audioOn ? '🔔' : '🔕'}
+          {audioOn ? <Bell size={18} strokeWidth={1.75} /> : <BellOff size={18} strokeWidth={1.75} />}
         </button>
       </h1>
-      <p className="s-sub">Las tandas listas se quedan acá hasta que el mesero las entregue. Si no las recoge, tocá 🔔 para volver a avisar.</p>
+      <p className="s-sub">Las tandas listas se quedan acá hasta que el mesero las entregue. Si no las recoge, tocá la campana para volver a avisar.</p>
       {isReadOnly && (
         <div style={{
           background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10,
           padding: '8px 12px', fontSize: 13, color: '#92400e', marginBottom: 12,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          👁 Modo solo lectura — admin no puede marcar tandas listas ni reenviar avisos
+          <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
+          Modo solo lectura — admin no puede marcar tandas listas ni reenviar avisos
         </div>
       )}
 
       {queue.length === 0 ? (
         <div className="cocina-empty">
-          <span className="big" aria-hidden="true">🌿</span>
+          <span className="big" aria-hidden="true">
+            <Leaf size={36} strokeWidth={1.5} />
+          </span>
           <p>Sin tandas en cola. Todo al día.</p>
         </div>
       ) : (
@@ -181,8 +189,10 @@ export function CocinaView() {
                   <div className="cocina-ready-banner" style={{
                     background: '#f0f9eb', color: '#3f6212', padding: '8px 12px',
                     borderRadius: 8, fontSize: 13.5, marginBottom: 10, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', gap: 6,
                   }}>
-                    ✓ Lista · esperando al mesero
+                    <Check size={16} strokeWidth={2.2} aria-hidden="true" />
+                    Lista · esperando al mesero
                   </div>
                 )}
                 <ul className="cocina-card-items">
@@ -196,16 +206,28 @@ export function CocinaView() {
                 {!isReadOnly && isReady && (
                   <button
                     className="btn-listo"
-                    style={{ background: '#fff', color: '#3f6212', border: '1.5px solid #3f6212' }}
+                    style={{
+                      background: '#fff', color: '#3f6212', border: '1.5px solid #3f6212',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    }}
                     disabled={!!busy[b.id]}
                     onClick={() => renotify(b.id)}
                   >
-                    {busy[b.id] ? 'Enviando…' : '🔔 Volver a notificar al mesero'}
+                    {busy[b.id] ? 'Enviando…' : (
+                      <><Bell size={18} strokeWidth={1.8} aria-hidden="true" /> Volver a notificar al mesero</>
+                    )}
                   </button>
                 )}
                 {!isReadOnly && !isReady && (
-                  <button className="btn-listo" disabled={!!busy[b.id]} onClick={() => setConfirmId(b.id)}>
-                    {busy[b.id] ? 'Marcando…' : '✓ Listo'}
+                  <button
+                    className="btn-listo"
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    disabled={!!busy[b.id]}
+                    onClick={() => setConfirmId(b.id)}
+                  >
+                    {busy[b.id] ? 'Marcando…' : (
+                      <><Check size={18} strokeWidth={2.2} aria-hidden="true" /> Listo</>
+                    )}
                   </button>
                 )}
               </article>

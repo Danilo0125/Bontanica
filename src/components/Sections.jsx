@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { VENUE } from '../data/data.js';
 import { Reveal, SectionTitle } from './ui.jsx';
+import { Leaf } from '../lib/icons.jsx';
 
 export function About() {
   return (
@@ -44,7 +45,9 @@ export function Gallery() {
             </figure>
           ) : (
             <div key={g.id} className={`g-slot g-${g.span} g-placeholder`} aria-label={g.ph}>
-              <span className="g-placeholder-leaf" aria-hidden="true">🌿</span>
+              <span className="g-placeholder-leaf" aria-hidden="true">
+                <Leaf size={28} strokeWidth={1.5} />
+              </span>
               <span className="g-placeholder-text">{g.ph}</span>
             </div>
           )

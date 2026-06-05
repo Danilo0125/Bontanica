@@ -71,5 +71,20 @@ export default defineConfig({
     }),
   ],
   server: { port: 5173, open: true },
-  build: { outDir: 'dist', sourcemap: true },
+  build: {
+    outDir: 'dist',
+    sourcemap: false, // No exponer el código fuente en prod (era 'true' antes).
+    rollupOptions: {
+      output: {
+        // Chunks vendor explícitos para que el cliente cachee bien entre deploys.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
+          if (id.includes('@supabase')) return 'vendor-supabase';
+          if (id.includes('react-router')) return 'vendor-router';
+          if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+        },
+      },
+    },
+  },
 });

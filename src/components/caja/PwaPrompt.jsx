@@ -3,6 +3,7 @@
 // se benefician de tener la PWA en pantalla de inicio).
 import { useEffect, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { Leaf, Download, Smartphone } from '../../lib/icons.jsx';
 
 const STORAGE_KEY_DISMISSED = 'botanica_pwa_dismissed';
 
@@ -82,7 +83,9 @@ export function PwaPrompt() {
     <>
       {show && (
         <div className="pwa-banner" role="dialog" aria-label="Instalar app">
-          <span className="pwa-banner-ico" aria-hidden="true">🌿</span>
+          <span className="pwa-banner-ico" aria-hidden="true">
+            <Leaf size={26} strokeWidth={1.5} />
+          </span>
           <div className="pwa-banner-body">
             <strong>Instalá Botánica</strong>
             <span>Acceso directo desde el cel, sin abrir el navegador.</span>
@@ -94,7 +97,9 @@ export function PwaPrompt() {
 
       {showIosHint && (
         <div className="pwa-banner pwa-banner--ios" role="dialog" aria-label="Instalar en iOS">
-          <span className="pwa-banner-ico" aria-hidden="true">📲</span>
+          <span className="pwa-banner-ico" aria-hidden="true">
+            <Smartphone size={26} strokeWidth={1.6} />
+          </span>
           <div className="pwa-banner-body">
             <strong>Agregá Botánica a inicio</strong>
             <span>Tocá <b>Compartir</b> y luego <b>Añadir a pantalla de inicio</b>.</span>
@@ -105,7 +110,9 @@ export function PwaPrompt() {
 
       {needRefresh && (
         <div className="pwa-banner pwa-banner--update" role="status">
-          <span className="pwa-banner-ico" aria-hidden="true">⬇️</span>
+          <span className="pwa-banner-ico" aria-hidden="true">
+            <Download size={26} strokeWidth={1.6} />
+          </span>
           <div className="pwa-banner-body">
             <strong>Nueva versión disponible</strong>
             <span>Recargá para usar los últimos cambios.</span>

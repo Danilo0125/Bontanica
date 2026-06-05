@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useTables } from '../../lib/useTables.js';
 import { useOpenOrders } from '../../lib/useOrders.js';
 import { money, minutesSince } from '../../lib/format.js';
+import { Check } from '../../lib/icons.jsx';
 
 const totalOf = (order) =>
   (order?.batches ?? []).filter((b) => b.status !== 'cancelled')
@@ -99,8 +100,9 @@ export function MeseroView() {
             <Link key={t.id} to={`/caja/mesero/${t.id}`} viewTransition
                   className={`mesa-card ${occupied ? 'is-occupied' : ''} ${ready ? 'is-ready' : ''}`}>
               <div className="mesa-head">
-                <span className="mesa-status">
-                  {ready ? '✓ Listo' : occupied ? 'Ocupada' : 'Libre'}
+                <span className="mesa-status" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {ready && <Check size={13} strokeWidth={2.4} aria-hidden="true" />}
+                  {ready ? 'Listo' : occupied ? 'Ocupada' : 'Libre'}
                 </span>
                 {occupied && <span className="mesa-mins">{mins}m</span>}
               </div>

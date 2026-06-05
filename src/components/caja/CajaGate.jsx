@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../lib/auth.jsx';
 import { ensureAudioCtx } from '../../lib/audio.js';
+import { Leaf } from '../../lib/icons.jsx';
 
 export function CajaGate() {
   const { signIn, profile, loading } = useAuth();
@@ -40,7 +41,9 @@ export function CajaGate() {
     <div className="staff-shell">
       <div className="staff-gate">
         <Link to="/" className="gate-back">← Volver al sitio</Link>
-        <div className="gate-leaf" aria-hidden="true">🌿</div>
+        <div className="gate-leaf" aria-hidden="true">
+          <Leaf size={36} strokeWidth={1.5} />
+        </div>
         <h1 className="gate-title">Personal · Botánica</h1>
         <p className="gate-sub">Acceso a caja, cocina y administración</p>
         <form onSubmit={onSubmit} className="gate-form">

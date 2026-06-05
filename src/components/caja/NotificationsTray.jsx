@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../lib/useNotifications.js';
 import { markAllNotificationsRead, markNotificationRead } from '../../lib/notificationsApi.js';
+import { Bell, UtensilsCrossed, Info, AlertTriangle, Leaf } from '../../lib/icons.jsx';
 
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -16,7 +17,11 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-const KIND_ICON = { ready: '🍽️', info: 'ℹ️', warn: '⚠️' };
+function kindIcon(kind) {
+  if (kind === 'ready') return <UtensilsCrossed size={20} strokeWidth={1.7} />;
+  if (kind === 'warn')  return <AlertTriangle  size={20} strokeWidth={1.7} />;
+  return <Info size={20} strokeWidth={1.7} />;
+}
 
 export function NotificationsTray({ recipient }) {
   const [open, setOpen] = useState(false);
@@ -81,7 +86,9 @@ export function NotificationsTray({ recipient }) {
         aria-label={unreadCount > 0 ? `${unreadCount} notificaciones sin leer` : 'Notificaciones'}
         aria-expanded={open}
       >
-        <span className="notif-bell-ico" aria-hidden="true">🔔</span>
+        <span className="notif-bell-ico" aria-hidden="true">
+          <Bell size={20} strokeWidth={1.75} />
+        </span>
         {unreadCount > 0 && (
           <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
         )}
@@ -107,7 +114,9 @@ export function NotificationsTray({ recipient }) {
             <div className="notif-list">
               {items.length === 0 ? (
                 <div className="notif-empty">
-                  <span className="leaf" aria-hidden="true">🌿</span>
+                  <span className="leaf" aria-hidden="true">
+                    <Leaf size={32} strokeWidth={1.5} />
+                  </span>
                   Sin notificaciones todavía.
                 </div>
               ) : items.map((n) => {
@@ -121,7 +130,7 @@ export function NotificationsTray({ recipient }) {
                     className={`notif-item ${kindClass}${unreadClass}`}
                     onClick={() => onItemClick(n)}
                   >
-                    <span className="notif-item-ico" aria-hidden="true">{KIND_ICON[n.kind] ?? 'ℹ️'}</span>
+                    <span className="notif-item-ico" aria-hidden="true">{kindIcon(n.kind)}</span>
                     <div className="notif-item-body">
                       {n.title && (
                         <div className="notif-item-title">

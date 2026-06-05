@@ -1,6 +1,7 @@
 // AdminDashboard.jsx — pestaña Resumen dentro de /caja/admin. Tema blanco.
 import { useAdminStats } from '../../lib/useAdminStats.js';
 import { money, formatTime } from '../../lib/format.js';
+import { AlertTriangle } from '../../lib/icons.jsx';
 
 const METHOD_LABEL = { efectivo: 'Efectivo', qr: 'QR / Transferencia' };
 
@@ -79,7 +80,9 @@ export function AdminDashboard() {
 
       {stats.alerts.length > 0 && (
         <>
-          <h2 className="s-h2" style={{ color: 'var(--s-crit)' }}>⚠ Alertas</h2>
+          <h2 className="s-h2" style={{ color: 'var(--s-crit)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertTriangle size={18} strokeWidth={1.8} aria-hidden="true" /> Alertas
+          </h2>
           <div className="alert-list">
             {stats.alerts.map((a) => (
               <div key={a.table_id} className="alert-row">
