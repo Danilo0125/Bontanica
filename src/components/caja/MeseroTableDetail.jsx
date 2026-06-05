@@ -1,6 +1,6 @@
 // MeseroTableDetail.jsx — vista de una mesa con cobro pre-pago por tanda.
 // Tema blanco minimal. Toda la lógica existente se mantiene.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTables } from '../../lib/useTables.js';
 import { useOpenOrders } from '../../lib/useOrders.js';
@@ -10,7 +10,6 @@ import {
 } from '../../lib/orderApi.js';
 import { getSession } from '../../lib/cajaSession.js';
 import { money, formatTime, minutesSince } from '../../lib/format.js';
-import { playBeep } from '../../lib/audio.js';
 import { ProductPicker } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
 import { useToast } from './Toasts.jsx';
@@ -98,29 +97,8 @@ export function MeseroTableDetail() {
     return list;
   }, [order]);
 
-  const prevReadyRef = useRef(new Set());
-  const seededRef = useRef(false);
-  useEffect(() => {
-    const myReadyBatchIds = new Set(
-      batches.filter((b) => b.effective === 'ready' && b.server_id === session?.server).map((b) => b.id)
-    );
-    if (!seededRef.current) {
-      seededRef.current = true;
-      prevReadyRef.current = myReadyBatchIds;
-      return;
-    }
-    const newReady = [...myReadyBatchIds].filter((id) => !prevReadyRef.current.has(id));
-    if (newReady.length > 0) {
-      playBeep('delivered');
-      newReady.forEach(() => {
-        toast.ready(`Mesa ${tableId} · tanda lista para entregar`, {
-          icon: '🍽️',
-          title: 'Pedido listo',
-        });
-      });
-    }
-    prevReadyRef.current = myReadyBatchIds;
-  }, [batches, session?.server, tableId, toast]);
+  // El aviso global de "tanda lista" vive en CajaLayout — funciona desde
+  // cualquier ruta del staff. Acá solo mostramos el estado visual del batch.
 
   const draftItems = Object.values(draft);
   const draftTotal = draftItems.reduce((s, { product, qty }) => s + Number(product.price) * qty, 0);
@@ -138,7 +116,16 @@ export function MeseroTableDetail() {
   }, []);
 
   const onConfirmPayment = async ({ method, received_amount }) => {
-    if (!orderId || !draftItems.length) return;
+    if (!orderId) {
+      toast.error('La mesa aún no está abierta — esperá un momento o salí y volvé a entrar');
+      setPaySheetOpen(false);
+      return;
+    }
+    if (!draftItems.length) {
+      toast.error('No hay ítems en la tanda nueva');
+      setPaySheetOpen(false);
+      return;
+    }
     try {
       setSubmitting(true);
       setError(null);
@@ -278,8 +265,12 @@ export function MeseroTableDetail() {
             <strong>{money(draftTotal)}<small> Bs</small></strong>
             <small>{draftCount} ítems</small>
           </div>
-          <button className="btn-cobrar" disabled={submitting} onClick={() => setPaySheetOpen(true)}>
-            Cobrar y enviar
+          <button
+            className="btn-cobrar"
+            disabled={submitting || paySheetOpen || !orderId}
+            onClick={() => { if (!submitting && !paySheetOpen && orderId) setPaySheetOpen(true); }}
+          >
+            {!orderId ? 'Abriendo mesa…' : 'Cobrar y enviar'}
           </button>
         </div>
       )}

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { CAJA_PASSWORD, isAuthed, setSession } from '../../lib/cajaSession.js';
+import { ensureAudioCtx } from '../../lib/audio.js';
 
 const SERVERS = [
   { id: 'ochito', label: 'Ochito' },
@@ -20,6 +21,8 @@ export function CajaGate() {
 
   const submitPassword = (e) => {
     e.preventDefault();
+    // Aprovechamos este user gesture para desbloquear el AudioContext (iOS/Safari).
+    ensureAudioCtx();
     if (pw === CAJA_PASSWORD) {
       setError(null);
       setStep('server');
@@ -29,6 +32,8 @@ export function CajaGate() {
   };
 
   const pickServer = (id) => {
+    // Segundo user gesture — garantía extra para que los beeps anden en móvil.
+    ensureAudioCtx();
     setSession({ server: id });
     navigate('/caja/mesero', { replace: true });
   };

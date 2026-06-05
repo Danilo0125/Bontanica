@@ -1,9 +1,9 @@
-// CocinaView.jsx — cola de tandas pagadas pendientes de preparar.
-// Tema blanco minimal. Card grande por tanda con borde izq de urgencia.
+// CocinaView.jsx — cola de tandas. Las tandas listas siguen visibles con
+// botón "Volver a notificar" hasta que el mesero las entregue.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOpenOrders } from '../../lib/useOrders.js';
 import { useTables } from '../../lib/useTables.js';
-import { supabase } from '../../lib/supabase.js';
+import { markBatchReady, bumpBatchNotification } from '../../lib/orderApi.js';
 import { formatTime, minutesSince } from '../../lib/format.js';
 import { isAudioOn, setAudioOn, ensureAudioCtx, playBeep } from '../../lib/audio.js';
 import { useToast } from './Toasts.jsx';
@@ -24,7 +24,9 @@ function urgencyLevel(mins) {
   return 'ok';
 }
 
-function buildPending(orders, tablesById) {
+// Construye la cola de cocina. Una tanda paid permanece visible aunque ya esté
+// lista — solo desaparece cuando el mesero la marca entregada (status='delivered').
+function buildQueue(orders, tablesById) {
   const out = [];
   for (const o of orders) {
     const itemsByBatch = new Map();
@@ -34,17 +36,22 @@ function buildPending(orders, tablesById) {
     }
     for (const b of o.batches ?? []) {
       if (b.status !== 'paid') continue;
-      const items = (itemsByBatch.get(b.id) ?? []).filter((it) => it.status === 'pending');
-      if (items.length === 0) continue;
+      const visibleItems = (itemsByBatch.get(b.id) ?? []).filter((it) => it.status !== 'cancelled');
+      if (visibleItems.length === 0) continue;
+      const phase = visibleItems.every((it) => it.status === 'ready') ? 'ready' : 'preparing';
       out.push({
-        ...b, items,
+        ...b, items: visibleItems, phase,
         order_id: o.id,
         table_id: o.table_id,
         table: tablesById.get(o.table_id),
       });
     }
   }
-  out.sort((a, b) => new Date(a.paid_at) - new Date(b.paid_at));
+  // Preparando primero, luego listas; dentro de cada grupo, las más antiguas arriba.
+  out.sort((a, b) => {
+    if (a.phase !== b.phase) return a.phase === 'preparing' ? -1 : 1;
+    return new Date(a.paid_at) - new Date(b.paid_at);
+  });
   return out;
 }
 
@@ -59,20 +66,22 @@ export function CocinaView() {
   useTick(30000);
 
   const tablesById = useMemo(() => new Map(tables.map((t) => [t.id, t])), [tables]);
-  const pending = useMemo(() => buildPending(orders, tablesById), [orders, tablesById]);
+  const queue = useMemo(() => buildQueue(orders, tablesById), [orders, tablesById]);
+  const preparingCount = queue.filter((b) => b.phase === 'preparing').length;
 
   useEffect(() => {
     if (loading) return;
-    const ids = new Set(pending.map((b) => b.id));
+    // Solo beepeamos por tandas nuevas en preparación.
+    const preparingIds = new Set(queue.filter((b) => b.phase === 'preparing').map((b) => b.id));
     if (seenBatchesRef.current === null) {
-      seenBatchesRef.current = ids;
+      seenBatchesRef.current = preparingIds;
       return;
     }
     const prev = seenBatchesRef.current;
-    const newOnes = [...ids].filter((id) => !prev.has(id));
+    const newOnes = [...preparingIds].filter((id) => !prev.has(id));
     if (newOnes.length > 0) playBeep('new');
-    seenBatchesRef.current = ids;
-  }, [pending, loading]);
+    seenBatchesRef.current = preparingIds;
+  }, [queue, loading]);
 
   const toggleAudio = () => {
     const next = !audioOn;
@@ -81,22 +90,31 @@ export function CocinaView() {
     if (next) { ensureAudioCtx(); playBeep('new'); }
   };
 
-  const confirmBatch = confirmId ? pending.find((b) => b.id === confirmId) : null;
+  const confirmBatch = confirmId ? queue.find((b) => b.id === confirmId) : null;
 
-  const markReady = async () => {
+  const doMarkReady = async () => {
     if (!confirmId) return;
     const id = confirmId;
     setConfirmId(null);
     setBusy((b) => ({ ...b, [id]: true }));
     try {
-      const { error } = await supabase.from('order_items')
-        .update({ status: 'ready', ready_at: new Date().toISOString() })
-        .eq('batch_id', id);
-      if (error) throw error;
+      await markBatchReady(id);
     } catch (e) {
       toast.error(`Error: ${e.message ?? e}`);
     } finally {
       setBusy((b) => { const n = { ...b }; delete n[id]; return n; });
+    }
+  };
+
+  const renotify = async (batchId) => {
+    setBusy((b) => ({ ...b, [batchId]: true }));
+    try {
+      await bumpBatchNotification(batchId);
+      toast.info('Aviso reenviado al mesero', { duration: 2500, icon: '🔔' });
+    } catch (e) {
+      toast.error(`No se pudo reenviar: ${e.message ?? e}`);
+    } finally {
+      setBusy((b) => { const n = { ...b }; delete n[batchId]; return n; });
     }
   };
 
@@ -113,28 +131,29 @@ export function CocinaView() {
   return (
     <div>
       <h1 className="s-h1" style={{ alignItems: 'center' }}>
-        Cola de cocina<span className="cocina-count">{pending.length}</span>
+        Cola de cocina<span className="cocina-count">{preparingCount}</span>
         <button className="audio-toggle" onClick={toggleAudio}
                 aria-label={audioOn ? 'Silenciar' : 'Activar avisos sonoros'}
                 title={audioOn ? 'Sonido activo' : 'Silenciado'}>
           {audioOn ? '🔔' : '🔕'}
         </button>
       </h1>
-      <p className="s-sub">Cada tanda ya está pagada. Marcá "Listo" cuando salga de cocina.</p>
+      <p className="s-sub">Las tandas listas se quedan acá hasta que el mesero las entregue. Si no las recoge, tocá 🔔 para volver a avisar.</p>
 
-      {pending.length === 0 ? (
+      {queue.length === 0 ? (
         <div className="cocina-empty">
           <span className="big" aria-hidden="true">🌿</span>
-          <p>Sin tandas pendientes. Todo al día.</p>
+          <p>Sin tandas en cola. Todo al día.</p>
         </div>
       ) : (
         <div className="cocina-grid">
-          {pending.map((b) => {
-            const mins = minutesSince(b.paid_at);
-            const level = urgencyLevel(mins);
+          {queue.map((b) => {
+            const isReady = b.phase === 'ready';
+            const mins = minutesSince(isReady ? (b.ready_at ?? b.paid_at) : b.paid_at);
+            const level = isReady ? 'ok' : urgencyLevel(mins);
             const itemCount = b.items.reduce((s, it) => s + it.qty, 0);
             return (
-              <article key={b.id} className={`cocina-card cocina-card--${level}`}>
+              <article key={b.id} className={`cocina-card cocina-card--${level}${isReady ? ' cocina-card--ready' : ''}`}>
                 <header className="cocina-card-head">
                   <div>
                     <strong className="cocina-card-mesa">{b.table?.name ?? `Mesa ${b.table_id}`}</strong>
@@ -144,9 +163,17 @@ export function CocinaView() {
                   </div>
                   <span className={`cocina-timer cocina-timer--${level}`}>
                     <span className="cocina-timer-dot" />
-                    {mins === 0 ? 'recién' : `${mins} min`}
+                    {isReady ? `lista hace ${mins} min` : (mins === 0 ? 'recién' : `${mins} min`)}
                   </span>
                 </header>
+                {isReady && (
+                  <div className="cocina-ready-banner" style={{
+                    background: '#f0f9eb', color: '#3f6212', padding: '8px 12px',
+                    borderRadius: 8, fontSize: 13.5, marginBottom: 10, fontWeight: 600,
+                  }}>
+                    ✓ Lista · esperando al mesero
+                  </div>
+                )}
                 <ul className="cocina-card-items">
                   {b.items.map((it) => (
                     <li key={it.id} className="coc-item">
@@ -155,9 +182,20 @@ export function CocinaView() {
                     </li>
                   ))}
                 </ul>
-                <button className="btn-listo" disabled={!!busy[b.id]} onClick={() => setConfirmId(b.id)}>
-                  {busy[b.id] ? 'Marcando…' : '✓ Listo'}
-                </button>
+                {isReady ? (
+                  <button
+                    className="btn-listo"
+                    style={{ background: '#fff', color: '#3f6212', border: '1.5px solid #3f6212' }}
+                    disabled={!!busy[b.id]}
+                    onClick={() => renotify(b.id)}
+                  >
+                    {busy[b.id] ? 'Enviando…' : '🔔 Volver a notificar al mesero'}
+                  </button>
+                ) : (
+                  <button className="btn-listo" disabled={!!busy[b.id]} onClick={() => setConfirmId(b.id)}>
+                    {busy[b.id] ? 'Marcando…' : '✓ Listo'}
+                  </button>
+                )}
               </article>
             );
           })}
@@ -179,7 +217,7 @@ export function CocinaView() {
             </ul>
             <div className="confirm-actions">
               <button className="btn-ghost" onClick={() => setConfirmId(null)}>Volver</button>
-              <button className="btn-primary" style={{ width: 'auto' }} onClick={markReady}>Sí, está listo</button>
+              <button className="btn-primary" style={{ width: 'auto' }} onClick={doMarkReady}>Sí, está listo</button>
             </div>
           </div>
         </div>

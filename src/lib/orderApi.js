@@ -70,6 +70,29 @@ export async function sendBatchPaid({ orderId, items, serverId, payment }) {
   return { batch, items: itemsIns.data };
 }
 
+// ─── Marcar batch como listo (cocina) ────────────────────────────────────────
+// Setea items.status=ready + ready_at + last_notified_at. Esto dispara el aviso
+// global al mesero dueño (efecto en CajaLayout) sin importar en qué ruta esté.
+export async function markBatchReady(batchId) {
+  const now = new Date().toISOString();
+  const itemsRes = await supabase.from('order_items')
+    .update({ status: 'ready', ready_at: now })
+    .eq('batch_id', batchId);
+  if (itemsRes.error) throw itemsRes.error;
+  const batchRes = await supabase.from('order_batches')
+    .update({ ready_at: now, last_notified_at: now })
+    .eq('id', batchId);
+  if (batchRes.error) throw batchRes.error;
+}
+
+// ─── Reenviar el aviso al mesero (botón "Volver a notificar" en cocina) ─────
+export async function bumpBatchNotification(batchId) {
+  const { error } = await supabase.from('order_batches')
+    .update({ last_notified_at: new Date().toISOString() })
+    .eq('id', batchId);
+  if (error) throw error;
+}
+
 // ─── Marcar batch como entregado (mesero, después de "Listo" de cocina) ─────
 export async function markBatchDelivered(batchId) {
   const { error } = await supabase.from('order_batches')
