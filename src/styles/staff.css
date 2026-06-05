@@ -266,6 +266,13 @@
 .staff-shell .mesa-card:active{transform:scale(.98);}
 .staff-shell .mesa-card.is-occupied{border-color:var(--s-accent-line);background:linear-gradient(180deg,#fbf7e6 0%,#fff 60%);}
 .staff-shell .mesa-card.is-ready{border-color:#a8d6b3;background:linear-gradient(180deg,#eaf6ed 0%,#fff 60%);}
+
+/* Urgencia por tiempo abierto: verde <15min, ámbar 15-30, rojo >30. */
+.staff-shell .mesa-card.urgency-ok   { border-color:#a8d6b3; background:linear-gradient(180deg,#eaf6ed 0%,#fff 65%); }
+.staff-shell .mesa-card.urgency-warn { border-color:#f0c674; background:linear-gradient(180deg,#fff4d6 0%,#fff 65%); }
+.staff-shell .mesa-card.urgency-crit { border-color:#e8a3a3; background:linear-gradient(180deg,#fbe1e1 0%,#fff 65%); }
+.staff-shell .mesa-card.urgency-warn .mesa-mins { color:#a16207; font-weight:600; }
+.staff-shell .mesa-card.urgency-crit .mesa-mins { color:var(--s-crit); font-weight:700; }
 .mesa-head{display:flex;align-items:center;justify-content:space-between;}
 .mesa-status{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--s-muted);}
 .staff-shell .mesa-card.is-occupied .mesa-status{color:var(--s-accent);}

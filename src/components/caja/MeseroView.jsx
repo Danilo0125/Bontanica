@@ -24,6 +24,13 @@ const activeItems = (order) => {
 const activeItemsCount = (order) =>
   activeItems(order).reduce((s, it) => s + it.qty, 0);
 
+// Urgencia por minutos abiertos: <15 ok, 15-29 warn, ≥30 crit.
+function urgencyLevel(mins) {
+  if (mins >= 30) return 'crit';
+  if (mins >= 15) return 'warn';
+  return 'ok';
+}
+
 const isOccupied = (order) => {
   if (!order) return false;
   return (order.batches ?? []).some((b) => b.status === 'paid');
@@ -104,22 +111,32 @@ export function MeseroView() {
           const tot = totalOf(order);
           const summary = order ? summarizeItems(order) : null;
           const mins = order ? minutesSince(order.opened_at) : 0;
+          // La urgencia solo aplica cuando la mesa está ocupada (no en libres).
+          // Si está "lista para entregar" mantenemos el verde porque ya está
+          // en estado positivo, no nos importa cuánto lleva abierta.
+          const urgency = occupied && !ready ? urgencyLevel(mins) : null;
+          const urgencyTitle = urgency === 'crit'
+            ? 'Más de 30 min sin moverse — revisar'
+            : urgency === 'warn' ? 'Más de 15 min — atención' : undefined;
           return (
-            <Link key={t.id} to={`/caja/mesero/${t.id}`} viewTransition
-                  className={`mesa-card ${occupied ? 'is-occupied' : ''} ${ready ? 'is-ready' : ''}`}>
+            <Link
+              key={t.id}
+              to={`/caja/mesero/${t.id}`}
+              viewTransition
+              className={[
+                'mesa-card',
+                occupied && 'is-occupied',
+                ready && 'is-ready',
+                urgency && `urgency-${urgency}`,
+              ].filter(Boolean).join(' ')}
+            >
               <div className="mesa-head">
                 <span className="mesa-status" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   {ready && <Check size={13} strokeWidth={2.4} aria-hidden="true" />}
                   {ready ? 'Listo' : occupied ? 'Ocupada' : 'Libre'}
                 </span>
                 {occupied && (
-                  <span
-                    className="mesa-mins"
-                    style={mins > 180 ? { color: 'var(--s-crit)', fontWeight: 700 } : undefined}
-                    title={mins > 180 ? 'Hace más de 3 horas — revisar si la mesa sigue activa' : undefined}
-                  >
-                    {mins}m
-                  </span>
+                  <span className="mesa-mins" title={urgencyTitle}>{mins}m</span>
                 )}
               </div>
               <span className="mesa-name">{t.name}</span>
