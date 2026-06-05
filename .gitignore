@@ -17,3 +17,8 @@ dev-dist
 .agents/
 skills-lock.json
 .claude/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
