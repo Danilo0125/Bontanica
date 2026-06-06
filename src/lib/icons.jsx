@@ -42,6 +42,11 @@ export {
   Download,
   RefreshCw,
   Share2,
+  // Búsqueda / acciones
+  Search,
+  Plus,
+  Trash2,
+  Link2,
 } from 'lucide-react';
 
 export const ICON_SIZE = 18;
