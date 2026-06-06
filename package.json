@@ -19,8 +19,8 @@
     "workbox-window": "^7.4.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^5.2.0",
     "sharp": "^0.34.5",
-    "vite": "^8.0.16"
+    "vite": "^7.3.5"
   }
 }

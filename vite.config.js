@@ -63,11 +63,10 @@ export default defineConfig({
           },
         ],
       },
-      devOptions: {
-        enabled: true,
-        type: 'module',
-        navigateFallback: 'index.html',
-      },
+      // PWA solo en producción. En dev mode el SW dev rompe con Vite 8 (no
+      // define __BUNDLED_DEV__ en @vite/client y la app no monta). El build
+      // de producción sí genera el SW correctamente.
+      devOptions: { enabled: false },
     }),
   ],
   server: { port: 5173, open: true },
