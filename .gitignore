@@ -17,3 +17,6 @@ dev-dist
 .agents/
 skills-lock.json
 .claude/
+
+# Payload crudo del QR de Yape (regenerable con scripts/decode_qr.py)
+scripts/qr_payload.txt

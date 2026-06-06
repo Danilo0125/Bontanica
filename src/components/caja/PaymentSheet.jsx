@@ -90,13 +90,17 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
                 <>
                   <div className="qr-card">
                     <div className="qr-card-head">
-                      <Leaf size={14} strokeWidth={1.8} aria-hidden="true" /> Botánica
+                      <Leaf size={14} strokeWidth={1.8} aria-hidden="true" /> Botánica · Pagá con Yape
                     </div>
                     <img className="qr-img" src={QR_PATH} alt="QR de pago de Botánica" />
+                    <div className="qr-card-foot">
+                      <b>Luz Selina Orozco Gonzales</b>
+                      <span>Cuenta receptora · Botánica RestoBar</span>
+                    </div>
                   </div>
                   <p className="qr-tip">
-                    El cliente escanea con <b>Yape</b> u otra app y muestra el comprobante.
-                    Verificá el monto antes de confirmar.
+                    El cliente escanea con <b>Yape</b> y muestra el comprobante. Verificá el monto
+                    antes de confirmar.
                   </p>
                 </>
               )}

@@ -451,7 +451,10 @@
   box-shadow:0 6px 22px rgba(31,68,46,.08), 0 1px 3px rgba(31,68,46,.05);}
 .qr-card-head{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
   letter-spacing:.08em;text-transform:uppercase;color:var(--s-accent-strong);}
-.qr-img{width:260px;height:333px;border-radius:12px;object-fit:contain;background:#fff;}
+.qr-img{width:260px;height:260px;border-radius:8px;object-fit:contain;background:#fff;}
+.qr-card-foot{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11.5px;color:var(--s-muted);
+  text-align:center;padding-top:4px;border-top:1px dashed var(--s-line);width:100%;margin-top:2px;}
+.qr-card-foot b{font-size:13px;color:var(--s-text);font-weight:600;letter-spacing:.01em;}
 .qr-tip{font-size:12.5px;color:var(--s-muted);text-align:center;line-height:1.45;max-width:280px;}
 .qr-tip b{color:var(--s-text);font-weight:600;}
 .qr-pending{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px;text-align:center;
