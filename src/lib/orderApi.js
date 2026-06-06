@@ -33,39 +33,29 @@ export async function getOrCreateOpenOrder(tableId, serverId) {
   return inserted.data;
 }
 
-// ─── Enviar a cocina + cobrar (atómico server-side con stock) ────────────────
-// items: [{ product, variant, qty }] — variant tiene { id, name, extra_price }.
-// El total y el stock se manejan en la RPC create_batch_with_stock (transacción
-// completa: si falla stock, rolea el batch y los items).
+// ─── Enviar a cocina + cobrar (atómico server-side) ──────────────────────────
+// items: [{ product, flavor, qty, unitPrice }] — flavor opcional.
+// Una sola transacción en la RPC create_batch: si algo falla, rollback total.
 export async function sendBatchPaid({ orderId, items, serverId, payment }) {
   if (!items?.length) throw new Error('No hay items para enviar');
 
-  const rpcItems = items.map(({ product, variant, qty }) => {
-    const unitPrice = Number(product.price) + Number(variant?.extra_price ?? 0);
-    return {
-      product_id: product.id,
-      variant_id: variant?.id ?? null,
-      product_name_snapshot: product.name,
-      variant_name_snapshot: variant?.name ?? null,
-      unit_price_snapshot: unitPrice,
-      qty: Number(qty),
-    };
-  });
+  const rpcItems = items.map(({ product, flavor, qty, unitPrice }) => ({
+    product_id: product.id,
+    flavor_id: flavor?.id ?? null,
+    product_name_snapshot: product.name,
+    flavor_name_snapshot: flavor?.name ?? null,
+    unit_price_snapshot: Number(unitPrice ?? product.price),
+    qty: Number(qty),
+  }));
 
-  const { data, error } = await supabase.rpc('create_batch_with_stock', {
+  const { data, error } = await supabase.rpc('create_batch', {
     p_order_id: orderId,
     p_items: rpcItems,
     p_payment_method: payment.method,
     p_received_amount: payment.method === 'efectivo' ? Number(payment.received_amount ?? null) : null,
     p_server_id: serverId,
   });
-  if (error) {
-    // El SQLSTATE 23514 lo usamos para "sin stock". Mostramos amigable.
-    if (error.code === '23514' || /sin stock/i.test(error.message)) {
-      throw new Error('No hay stock suficiente para algún producto de esta tanda. Ajustá la cantidad o el sabor.');
-    }
-    throw error;
-  }
+  if (error) throw error;
 
   const batch = { id: data.batch_id, total: data.total, order_id: orderId, server_id: serverId };
   logAction('batch_paid', {
@@ -73,7 +63,7 @@ export async function sendBatchPaid({ orderId, items, serverId, payment }) {
     payload: {
       order_id: orderId, total: data.total,
       payment_method: payment.method, item_count: items.length,
-      items: rpcItems.map((it) => ({ id: it.product_id, variant_id: it.variant_id, qty: it.qty })),
+      items: rpcItems.map((it) => ({ id: it.product_id, flavor_id: it.flavor_id, qty: it.qty })),
     },
   });
   return { batch, items: rpcItems };

@@ -124,9 +124,9 @@ export function MeseroTableDetail() {
     for (const entry of Object.values(productDraft)) {
       items.push({
         product: entry.product,
-        variant: entry.variant,
+        flavor: entry.flavor,
         qty: entry.qty,
-        unitPrice: entry.unitPrice ?? Number(entry.product.price) + Number(entry.variant?.extra_price ?? 0),
+        unitPrice: entry.unitPrice ?? Number(entry.product.price),
       });
     }
     for (const c of comboDraft) {
@@ -144,20 +144,19 @@ export function MeseroTableDetail() {
     [draftItems]
   );
 
-  const addVariantToDraft = useCallback((product, variant) => {
-    if (!variant) return;
-    const key = draftKeyOf(product.id, variant.id);
+  const addFlavorToDraft = useCallback((product, flavor) => {
+    const key = draftKeyOf(product.id, flavor?.id ?? null);
     setDraft((d) => {
       const cur = d.products[key]?.qty ?? 0;
-      const unitPrice = Number(product.price) + Number(variant.extra_price ?? 0);
+      const unitPrice = Number(product.price);
       return {
         ...d,
-        products: { ...d.products, [key]: { product, variant, qty: cur + 1, unitPrice } },
+        products: { ...d.products, [key]: { product, flavor, qty: cur + 1, unitPrice } },
       };
     });
   }, []);
-  const decVariantFromDraft = useCallback((product, variant) => {
-    const key = draftKeyOf(product.id, variant.id);
+  const decFlavorFromDraft = useCallback((product, flavor) => {
+    const key = draftKeyOf(product.id, flavor?.id ?? null);
     setDraft((d) => {
       const cur = d.products[key]?.qty ?? 0;
       if (cur <= 1) {
@@ -196,10 +195,7 @@ export function MeseroTableDetail() {
       setError(null);
       await sendBatchPaid({
         orderId,
-        items: draftItems.map(({ product, variant, qty, unitPrice }) => ({
-          product: { ...product, price: unitPrice }, // unitPrice incluye extra_price y/o split de combo
-          variant, qty,
-        })),
+        items: draftItems,
         serverId: username,
         payment: { method, received_amount },
       });
@@ -360,8 +356,8 @@ export function MeseroTableDetail() {
           <h2 className="s-h2">Agregar a la cuenta</h2>
           <ProductPicker
             productDraft={productDraft}
-            onAddVariant={addVariantToDraft}
-            onDecVariant={decVariantFromDraft}
+            onAddFlavor={addFlavorToDraft}
+            onDecFlavor={decFlavorFromDraft}
             onAddCombo={addComboToDraft}
           />
           {comboDraft.length > 0 && (
@@ -379,7 +375,7 @@ export function MeseroTableDetail() {
                       {c.items.map((it, i) => (
                         <span key={i}>
                           {i > 0 && ' · '}
-                          {it.variant?.name ?? it.product.name}
+                          {it.flavor?.name ?? it.product.name}
                         </span>
                       ))}
                     </div>

@@ -1,39 +1,30 @@
-// VariantSheet.jsx — bottom-sheet que se abre al tocar un producto con
-// múltiples sabores. Muestra cada variante con su stock + controles +/−.
+// FlavorSheet.jsx — bottom-sheet con los sabores compartidos de un producto.
+// Sin stock (el toggle del sabor en admin filtra si aparece o no).
 import { useEffect } from 'react';
 import { money } from '../../lib/format.js';
-import { X, Check } from '../../lib/icons.jsx';
+import { Check } from '../../lib/icons.jsx';
 
-function stockLabel(v) {
-  const s = v.stock ?? 0;
-  if (s <= 0) return { text: 'Agotado', kind: 'out' };
-  if (s <= 3) return { text: `Quedan ${s}`, kind: 'low' };
-  return { text: `${s} disp.`, kind: 'ok' };
-}
-
-export function VariantSheet({
+export function FlavorSheet({
   product,
-  variants,
-  qtyByVariantId,
+  flavors,
+  qtyByFlavorId,
   onAdd,
   onDec,
   onClose,
 }) {
-  // Lockea scroll del body mientras la sheet está abierta (mobile)
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  // Escape cierra
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const total = variants.reduce((s, v) => s + (qtyByVariantId[v.id] ?? 0), 0);
+  const total = flavors.reduce((s, f) => s + (qtyByFlavorId[f.id] ?? 0), 0);
 
   return (
     <div className="s-scrim" onClick={onClose} role="presentation">
@@ -48,49 +39,28 @@ export function VariantSheet({
         <p className="s-sheet-sub">Elegí el sabor. Cada toque suma una unidad.</p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-          {variants.map((v) => {
-            const qty = qtyByVariantId[v.id] ?? 0;
-            const stock = stockLabel(v);
-            const isOut = stock.kind === 'out';
-            const remaining = (v.stock ?? 0) - qty;
-            const canAdd = !isOut && remaining > 0;
-            const extra = Number(v.extra_price ?? 0);
+          {flavors.map((f) => {
+            const qty = qtyByFlavorId[f.id] ?? 0;
             return (
               <div
-                key={v.id}
+                key={f.id}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '12px 14px',
                   border: '1.5px solid var(--s-line)',
                   borderRadius: 12,
-                  background: qty > 0 ? 'var(--s-accent-bg)' : (isOut ? '#fafaf9' : '#fff'),
-                  opacity: isOut ? 0.55 : 1,
+                  background: qty > 0 ? 'var(--s-accent-bg)' : '#fff',
                 }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--s-text)' }}>
-                    {v.name}
-                    {extra > 0 && (
-                      <span style={{ fontSize: 12, color: 'var(--s-accent)', marginLeft: 8 }}>
-                        +{money(extra)} Bs
-                      </span>
-                    )}
-                  </div>
-                  <div style={{
-                    fontSize: 12, marginTop: 2,
-                    color: stock.kind === 'out' ? 'var(--s-crit)' :
-                          stock.kind === 'low' ? '#a16207' : 'var(--s-muted)',
-                    fontWeight: stock.kind === 'low' ? 600 : 400,
-                  }}>
-                    {stock.text}
-                  </div>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: 'var(--s-text)' }}>
+                  {f.name}
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => onDec(v)}
+                  onClick={() => onDec(f)}
                   disabled={qty <= 0}
-                  aria-label={`Quitar ${v.name}`}
+                  aria-label={`Quitar ${f.name}`}
                   style={{
                     width: 36, height: 36, borderRadius: 999,
                     border: '1px solid var(--s-line)',
@@ -107,14 +77,12 @@ export function VariantSheet({
                 </span>
                 <button
                   type="button"
-                  onClick={() => onAdd(v)}
-                  disabled={!canAdd}
-                  aria-label={`Agregar ${v.name}`}
+                  onClick={() => onAdd(f)}
+                  aria-label={`Agregar ${f.name}`}
                   style={{
                     width: 36, height: 36, borderRadius: 999, border: 'none',
-                    background: canAdd ? 'var(--s-accent)' : 'var(--s-line-2)',
-                    color: canAdd ? '#fff' : 'var(--s-muted)',
-                    fontSize: 20, lineHeight: 1, cursor: canAdd ? 'pointer' : 'not-allowed',
+                    background: 'var(--s-accent)', color: '#fff',
+                    fontSize: 20, lineHeight: 1, cursor: 'pointer',
                   }}
                 >+</button>
               </div>

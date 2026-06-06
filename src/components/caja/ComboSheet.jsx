@@ -1,32 +1,29 @@
 // ComboSheet.jsx — bottom-sheet para configurar un combo antes de agregarlo
-// al draft. Por cada combo_item con qty=N, muestra N selectores de variante.
-// El precio del combo se reparte entre los N items al cobrar (la suma de
-// unit_price * qty da exactamente combo.price).
+// al draft. Por cada combo_item con qty=N, muestra N selectores de sabor
+// (filtrado por los sabores activos del producto base).
+// El precio del combo se reparte entre los N items al cobrar.
 import { useEffect, useMemo, useState } from 'react';
 import { money } from '../../lib/format.js';
 import { Check } from '../../lib/icons.jsx';
 
-function defaultVariantFor(productId, variantsByProduct) {
-  const vs = (variantsByProduct.get(productId) ?? []).filter((v) => v.is_active);
-  // Primera disponible con stock > 0; sino la primera activa.
-  return vs.find((v) => (v.stock ?? 0) > 0) ?? vs[0] ?? null;
+function defaultFlavorFor(productId, flavorsByProduct) {
+  const flavors = flavorsByProduct.get(productId) ?? [];
+  return flavors[0] ?? null;
 }
 
 export function ComboSheet({
   combo,
   productsById,
-  variantsByProduct,
+  flavorsByProduct,
   onConfirm,
   onClose,
 }) {
-  // Lockea scroll body
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  // Aplana combo.items en slots. Si combo.items = [{ pizza, qty: 2 }], crea 2 slots para pizza.
   const slots = useMemo(() => {
     const arr = [];
     for (const ci of combo.items ?? []) {
@@ -37,29 +34,34 @@ export function ComboSheet({
     return arr;
   }, [combo]);
 
-  // Estado: para cada slot, qué variant_id eligió el mesero.
+  // Estado: para cada slot, qué flavor_id (si el producto tiene sabores).
   const [selections, setSelections] = useState(() => {
     const init = {};
     for (const s of slots) {
-      const def = defaultVariantFor(s.productId, variantsByProduct);
-      init[s.index] = def?.id ?? null;
+      const flavors = flavorsByProduct.get(s.productId) ?? [];
+      if (flavors.length > 0) {
+        init[s.index] = defaultFlavorFor(s.productId, flavorsByProduct)?.id ?? null;
+      } else {
+        init[s.index] = null; // producto sin sabores
+      }
     }
     return init;
   });
 
-  // Escape cierra
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const allChosen = slots.every((s) => selections[s.index]);
+  // Validación: cada slot que tiene sabores debe tener uno elegido.
+  const allChosen = slots.every((s) => {
+    const flavors = flavorsByProduct.get(s.productId) ?? [];
+    return flavors.length === 0 || selections[s.index];
+  });
   const totalSlots = slots.length;
 
-  // Reparto del precio: la suma de unit_price * qty debe dar combo.price.
-  // Cada slot recibe combo.price / totalSlots. Para evitar drift por redondeo
-  // a 2 decimales, le sumamos al último el remainder.
+  // Reparto del precio del combo entre los slots (igual + remainder al último).
   const perSlot = useMemo(() => {
     const base = Math.floor((Number(combo.price) * 100) / totalSlots) / 100;
     const totalBase = Number((base * totalSlots).toFixed(2));
@@ -69,12 +71,11 @@ export function ComboSheet({
 
   const handleConfirm = () => {
     if (!allChosen) return;
-    // Construir array de items: cada slot es 1 ítem en draftItems con su unit_price del combo.
     const items = slots.map((s, i) => {
       const product = productsById.get(s.productId);
-      const variants = variantsByProduct.get(s.productId) ?? [];
-      const variant = variants.find((v) => v.id === selections[s.index]) ?? null;
-      return { product, variant, qty: 1, unitPrice: perSlot[i] };
+      const flavors = flavorsByProduct.get(s.productId) ?? [];
+      const flavor = flavors.find((f) => f.id === selections[s.index]) ?? null;
+      return { product, flavor, qty: 1, unitPrice: perSlot[i] };
     });
     onConfirm({ combo, items });
   };
@@ -94,7 +95,7 @@ export function ComboSheet({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
           {slots.map((s) => {
             const product = productsById.get(s.productId);
-            const variants = (variantsByProduct.get(s.productId) ?? []).filter((v) => v.is_active);
+            const flavors = flavorsByProduct.get(s.productId) ?? [];
             if (!product) {
               return (
                 <div key={s.index} style={{ color: 'var(--s-crit)', fontSize: 13 }}>
@@ -111,24 +112,24 @@ export function ComboSheet({
                 <div style={{ fontSize: 12, color: 'var(--s-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
                   Slot {s.index + 1} · {product.name}
                 </div>
-                <select
-                  value={selections[s.index] ?? ''}
-                  onChange={(e) => setSelections((cur) => ({ ...cur, [s.index]: e.target.value || null }))}
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: '1px solid var(--s-line)', background: '#fff', fontSize: 14,
-                  }}
-                >
-                  {variants.length === 0 && <option value="">— sin variantes —</option>}
-                  {variants.map((v) => {
-                    const out = (v.stock ?? 0) <= 0;
-                    return (
-                      <option key={v.id} value={v.id} disabled={out}>
-                        {v.name}{out ? ' (agotado)' : ` · stock ${v.stock}`}
-                      </option>
-                    );
-                  })}
-                </select>
+                {flavors.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--s-muted)', padding: '6px 0' }}>
+                    Sin sabores — se agrega directo.
+                  </div>
+                ) : (
+                  <select
+                    value={selections[s.index] ?? ''}
+                    onChange={(e) => setSelections((cur) => ({ ...cur, [s.index]: e.target.value || null }))}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 8,
+                      border: '1px solid var(--s-line)', background: '#fff', fontSize: 14,
+                    }}
+                  >
+                    {flavors.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             );
           })}

@@ -2,7 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listAllProducts, createProduct, updateProduct } from '../../../lib/productApi.js';
 import { uploadProductImage, deleteProductImageByUrl } from '../../../lib/storageApi.js';
-import { adminListVariantsByProduct, createVariant, updateVariant, deleteVariant } from '../../../lib/variantApi.js';
+import {
+  adminListAllFlavors, attachFlavorToProduct, detachFlavorFromProduct,
+} from '../../../lib/flavorApi.js';
+import { supabase } from '../../../lib/supabase.js';
 import { useToast } from '../Toasts.jsx';
 import { useDialog } from '../Dialog.jsx';
 import { Camera, X, ChevronLeft, Check } from '../../../lib/icons.jsx';
@@ -257,7 +260,7 @@ export function Products() {
                     <span className="sw-track" />
                   </label>
                 </div>
-                <VariantsPanel product={p} onChange={() => handleVariantsChange(p.id)} />
+                <FlavorsPanel product={p} />
               </div>
             ))}
           </div>
@@ -276,12 +279,138 @@ export function Products() {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// VariantsPanel: panel inline expandible debajo de cada producto.
-// Lista las variantes, permite agregar / renombrar / cambiar extra_price /
-// activar / borrar. El stock se edita en /caja/admin/stock — acá es
-// read-only para no fragmentar la fuente de verdad.
+// FlavorsPanel: panel inline expandible. Muestra los sabores globales con
+// checkbox de cuáles aplican a este producto (M:N via product_flavors).
+// Para crear/desactivar/borrar un sabor en sí, ir a /caja/admin/sabores.
 
-function VariantsPanel({ product, onChange }) {
+function FlavorsPanel({ product }) {
+  const [expanded, setExpanded] = useState(false);
+  const [allFlavors, setAllFlavors] = useState(null);
+  const [assigned, setAssigned] = useState(new Set()); // flavor_ids vinculados a este producto
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [all, links] = await Promise.all([
+        adminListAllFlavors(),
+        supabase.from('product_flavors').select('flavor_id').eq('product_id', product.id),
+      ]);
+      if (links.error) throw links.error;
+      setAllFlavors(all);
+      setAssigned(new Set((links.data ?? []).map((l) => l.flavor_id)));
+    } catch (e) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, [product.id, toast]);
+
+  useEffect(() => { if (expanded && allFlavors === null) load(); }, [expanded, allFlavors, load]);
+
+  const onToggle = async (flavor, checked) => {
+    setBusyId(flavor.id);
+    try {
+      if (checked) {
+        await attachFlavorToProduct(product.id, flavor.id, (assigned.size + 1));
+        setAssigned((s) => { const n = new Set(s); n.add(flavor.id); return n; });
+      } else {
+        await detachFlavorFromProduct(product.id, flavor.id);
+        setAssigned((s) => { const n = new Set(s); n.delete(flavor.id); return n; });
+      }
+    } catch (e) { toast.error(e.message); }
+    finally { setBusyId(null); }
+  };
+
+  const assignedCount = assigned.size;
+  const activeFlavors = (allFlavors ?? []).filter((f) => f.is_active);
+  const inactiveFlavors = (allFlavors ?? []).filter((f) => !f.is_active);
+
+  return (
+    <div style={{ width: '100%', marginTop: 8, borderTop: '1px solid var(--s-line-2)', paddingTop: 8 }}>
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: '4px 6px', fontSize: 12.5, color: 'var(--s-muted)',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}
+      >
+        <ChevronLeft
+          size={14}
+          strokeWidth={2}
+          style={{ transform: expanded ? 'rotate(-90deg)' : 'rotate(180deg)', transition: 'transform .15s' }}
+        />
+        Sabores
+        {assignedCount > 0 && (
+          <span style={{
+            background: 'var(--s-surface-2)', color: 'var(--s-text)',
+            padding: '1px 8px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+          }}>
+            {assignedCount}
+          </span>
+        )}
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: 8 }}>
+          {loading && allFlavors === null ? (
+            <div style={{ fontSize: 12.5, color: 'var(--s-muted)', padding: '6px 10px' }}>Cargando…</div>
+          ) : (allFlavors ?? []).length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--s-muted)', padding: '8px 12px', background: 'var(--s-surface-2)', borderRadius: 8 }}>
+              No hay sabores creados todavía. Andá a la pestaña Sabores para crearlos.
+            </div>
+          ) : (
+            <>
+              <div style={{
+                display: 'flex', flexWrap: 'wrap', gap: 6, padding: '4px 0',
+              }}>
+                {activeFlavors.map((f) => {
+                  const isAssigned = assigned.has(f.id);
+                  const isBusy = busyId === f.id;
+                  return (
+                    <label
+                      key={f.id}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '6px 12px', borderRadius: 999, fontSize: 12.5, fontWeight: 600,
+                        background: isAssigned ? 'var(--s-accent-bg)' : '#fff',
+                        border: `1px solid ${isAssigned ? 'var(--s-accent-line)' : 'var(--s-line)'}`,
+                        color: isAssigned ? 'var(--s-accent-strong)' : 'var(--s-text)',
+                        cursor: isBusy ? 'wait' : 'pointer', opacity: isBusy ? 0.6 : 1,
+                        userSelect: 'none',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isAssigned}
+                        disabled={isBusy}
+                        onChange={(e) => onToggle(f, e.target.checked)}
+                        style={{ accentColor: 'var(--s-accent)' }}
+                      />
+                      {f.name}
+                    </label>
+                  );
+                })}
+              </div>
+              {inactiveFlavors.length > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--s-muted)', marginTop: 6, fontStyle: 'italic' }}>
+                  Inactivos (no se muestran en el picker): {inactiveFlavors.map((f) => f.name).join(', ')}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// VariantsPanel viejo eliminado en favor de FlavorsPanel (M:N de sabores).
+// El bloque siguiente está dead code y debería borrarse en el próximo
+// pass. Lo dejamos comentado hasta confirmar que FlavorsPanel cubre todo.
+/*
+function _DeprecatedVariantsPanel({ product, onChange }) {
   const [expanded, setExpanded] = useState(false);
   const [variants, setVariants] = useState(null); // null = no cargado todavía
   const [loading, setLoading] = useState(false);
@@ -487,3 +616,4 @@ function VariantsPanel({ product, onChange }) {
     </div>
   );
 }
+*/
