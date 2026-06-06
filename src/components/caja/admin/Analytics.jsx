@@ -6,7 +6,7 @@ import {
   Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import {
-  fetchKpis, fetchTopProducts, fetchRevenueByDay, fetchRevenueByHour,
+  fetchKpis, fetchTopProducts, fetchTopVariants, fetchRevenueByDay, fetchRevenueByHour,
   fetchServerPerformance, fetchKitchenTimes, rangePresets,
 } from '../../../lib/analyticsApi.js';
 import { money } from '../../../lib/format.js';
@@ -76,6 +76,7 @@ export function Analytics() {
   const [error, setError] = useState(null);
   const [kpis, setKpis] = useState(null);
   const [topProducts, setTopProducts] = useState([]);
+  const [topVariants, setTopVariants] = useState([]);
   const [byDay, setByDay] = useState([]);
   const [byHour, setByHour] = useState([]);
   const [servers, setServers] = useState([]);
@@ -88,16 +89,17 @@ export function Analytics() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        const [k, p, d, h, s, kt] = await Promise.all([
+        const [k, p, tv, d, h, s, kt] = await Promise.all([
           fetchKpis(range.from, range.to),
           fetchTopProducts(range.from, range.to, 10),
+          fetchTopVariants(range.from, range.to, 10),
           fetchRevenueByDay(range.from, range.to),
           fetchRevenueByHour(range.from, range.to),
           fetchServerPerformance(range.from, range.to),
           fetchKitchenTimes(range.from, range.to),
         ]);
         if (cancelled) return;
-        setKpis(k); setTopProducts(p); setByDay(d); setByHour(h);
+        setKpis(k); setTopProducts(p); setTopVariants(tv); setByDay(d); setByHour(h);
         setServers(s); setKitchen(kt);
       } catch (e) {
         if (!cancelled) setError(e.message ?? String(e));
@@ -130,6 +132,12 @@ export function Analytics() {
     units: Number(r.units),
     revenue: Number(r.revenue),
   })), [topProducts]);
+
+  const topVariantData = useMemo(() => topVariants.map((r) => ({
+    name: `${r.product_name} · ${r.variant_name}`,
+    units: Number(r.units),
+    revenue: Number(r.revenue),
+  })), [topVariants]);
 
   const serverData = useMemo(() => servers.map((r) => ({
     name: r.full_name ?? r.server_id,
@@ -237,6 +245,33 @@ export function Analytics() {
                   formatter={(v) => productMode === 'revenue' ? `${money(Number(v))} Bs` : `${v} u`}
                 />
                 <Bar dataKey={productMode} fill={COLORS.primary} radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Panel>
+
+        <Panel
+          title="Top sabores / variantes"
+          sub={`Las variantes más vendidas (incluye sabor)`}
+          height={Math.max(220, topVariantData.length * 32)}
+        >
+          {topVariantData.length === 0 ? (
+            <EmptyChart text="Sin ventas con variantes en este rango" />
+          ) : (
+            <ResponsiveContainer>
+              <BarChart data={topVariantData} layout="vertical" margin={{ top: 6, right: 20, left: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={COLORS.line} horizontal={false} />
+                <XAxis type="number" stroke={COLORS.muted} fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" stroke={COLORS.text} fontSize={11.5} tickLine={false} axisLine={false} width={170} />
+                <Tooltip
+                  contentStyle={tooltipStyle()}
+                  cursor={{ fill: 'rgba(59,110,165,.08)' }}
+                  formatter={(v, _k, payload) => [
+                    productMode === 'revenue' ? `${money(Number(v))} Bs` : `${v} u`,
+                    `${payload.payload.units} u · ${money(payload.payload.revenue)} Bs`,
+                  ]}
+                />
+                <Bar dataKey={productMode} fill={COLORS.blue} radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

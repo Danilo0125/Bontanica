@@ -18,6 +18,10 @@ export function fetchTopProducts(from, to, limit = 10) {
   return callRpc('analytics_top_products', { p_from: isoFrom(from), p_to: isoFrom(to), p_limit: limit });
 }
 
+export function fetchTopVariants(from, to, limit = 10) {
+  return callRpc('analytics_top_variants', { p_from: isoFrom(from), p_to: isoFrom(to), p_limit: limit });
+}
+
 export function fetchRevenueByDay(from, to) {
   return callRpc('analytics_revenue_by_day', { p_from: isoFrom(from), p_to: isoFrom(to) });
 }

@@ -61,9 +61,23 @@ export function ProductPicker({
     }
   };
 
+  // Dentro de cada categoría, productos con stock > 0 primero (manteniendo
+  // su sort_order), agotados al fondo. Así el mesero ve antes lo vendible.
+  const sortedCategories = categories.map((cat) => ({
+    ...cat,
+    items: [...cat.items].sort((a, b) => {
+      const sa = totalStockOf(a.id);
+      const sb = totalStockOf(b.id);
+      const outA = sa <= 0 ? 1 : 0;
+      const outB = sb <= 0 ? 1 : 0;
+      if (outA !== outB) return outA - outB;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    }),
+  }));
+
   return (
     <div className="picker">
-      {categories.map((cat) => (
+      {sortedCategories.map((cat) => (
         <div className="pick-cat" key={cat.id}>
           <span className="pick-cat-name">{cat.name}</span>
           <div className="pick-items">

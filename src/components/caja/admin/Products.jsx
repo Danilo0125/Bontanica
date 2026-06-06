@@ -1,10 +1,11 @@
 // Products.jsx — CRUD de productos como lista vertical de cards (sin tabla).
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listAllProducts, createProduct, updateProduct } from '../../../lib/productApi.js';
 import { uploadProductImage, deleteProductImageByUrl } from '../../../lib/storageApi.js';
+import { adminListVariantsByProduct, createVariant, updateVariant, deleteVariant } from '../../../lib/variantApi.js';
 import { useToast } from '../Toasts.jsx';
 import { useDialog } from '../Dialog.jsx';
-import { Camera } from '../../../lib/icons.jsx';
+import { Camera, X, ChevronLeft, Check } from '../../../lib/icons.jsx';
 
 function NewProductModal({ onClose, onCreated, existingCategories }) {
   const [name, setName] = useState('');
@@ -203,6 +204,11 @@ export function Products() {
     byCat.get(p.category_id).items.push(p);
   }
 
+  const handleVariantsChange = (productId) => {
+    // No-op por ahora — Variants es state local del componente VariantsPanel.
+    // Si queremos refrescar otra cosa al cambiar variantes, va acá.
+  };
+
   return (
     <div>
       <div className="admin-bar">
@@ -215,7 +221,8 @@ export function Products() {
           <h2 className="s-h2">{cat.name}</h2>
           <div className="prod-list">
             {cat.items.map((p) => (
-              <div key={p.id} className={`prod-card ${p.is_active ? '' : 'is-off'}`}>
+              <div key={p.id} className={`prod-card ${p.is_active ? '' : 'is-off'}`}
+                   style={{ flexWrap: 'wrap' }}>
                 <ProdPhoto product={p} disabled={savingId === p.id}
                            onUpload={onUploadImage} onRemove={onRemoveImage} />
                 <div className="prod-fields">
@@ -250,6 +257,7 @@ export function Products() {
                     <span className="sw-track" />
                   </label>
                 </div>
+                <VariantsPanel product={p} onChange={() => handleVariantsChange(p.id)} />
               </div>
             ))}
           </div>
@@ -262,6 +270,219 @@ export function Products() {
           onCreated={() => { setModal(false); load(); }}
           existingCategories={categories}
         />
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// VariantsPanel: panel inline expandible debajo de cada producto.
+// Lista las variantes, permite agregar / renombrar / cambiar extra_price /
+// activar / borrar. El stock se edita en /caja/admin/stock — acá es
+// read-only para no fragmentar la fuente de verdad.
+
+function VariantsPanel({ product, onChange }) {
+  const [expanded, setExpanded] = useState(false);
+  const [variants, setVariants] = useState(null); // null = no cargado todavía
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const toast = useToast();
+  const dialog = useDialog();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await adminListVariantsByProduct(product.id);
+      setVariants(list);
+    } catch (e) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, [product.id, toast]);
+
+  // Lazy load al expandir la primera vez
+  useEffect(() => {
+    if (expanded && variants === null) load();
+  }, [expanded, variants, load]);
+
+  const onAdd = async () => {
+    const name = await dialog.prompt({
+      title: 'Nueva variante',
+      message: `Sabor o variante para ${product.name}`,
+      placeholder: 'ej. Muzzarella, Hawaiana, Dulce...',
+      minLength: 1,
+      confirmLabel: 'Crear',
+    });
+    if (!name) return;
+    try {
+      const created = await createVariant({ productId: product.id, name: name.trim() });
+      setVariants((arr) => [...(arr ?? []), created]);
+      toast.success(`"${name}" creada`);
+      onChange?.();
+    } catch (e) { toast.error(e.message); }
+  };
+
+  const onPatch = async (variantId, patch) => {
+    setBusyId(variantId);
+    try {
+      const updated = await updateVariant(variantId, patch);
+      setVariants((arr) => arr.map((v) => v.id === variantId ? updated : v));
+      onChange?.();
+    } catch (e) { toast.error(`No se pudo guardar: ${e.message}`); load(); }
+    finally { setBusyId(null); }
+  };
+
+  const onDelete = async (variant) => {
+    if ((variant.stock ?? 0) > 0) {
+      toast.error('No podés borrar una variante con stock. Bajalo a 0 primero (en Stock).');
+      return;
+    }
+    const ok = await dialog.confirm({
+      title: '¿Borrar variante?',
+      message: `"${variant.name}" — el historial de ventas mantiene el snapshot del nombre.`,
+      confirmLabel: 'Sí, borrar',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
+    setBusyId(variant.id);
+    try {
+      await deleteVariant(variant.id);
+      setVariants((arr) => arr.filter((v) => v.id !== variant.id));
+      onChange?.();
+    } catch (e) { toast.error(e.message); }
+    finally { setBusyId(null); }
+  };
+
+  const activeCount = (variants ?? []).filter((v) => v.is_active).length;
+  const totalCount = (variants ?? []).length;
+
+  return (
+    <div style={{ width: '100%', marginTop: 8, borderTop: '1px solid var(--s-line-2)', paddingTop: 8 }}>
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: '4px 6px', fontSize: 12.5, color: 'var(--s-muted)',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}
+      >
+        <ChevronLeft
+          size={14}
+          strokeWidth={2}
+          style={{ transform: expanded ? 'rotate(-90deg)' : 'rotate(180deg)', transition: 'transform .15s' }}
+        />
+        Variantes
+        {totalCount > 0 && (
+          <span style={{
+            background: 'var(--s-surface-2)', color: 'var(--s-text)',
+            padding: '1px 8px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+          }}>
+            {activeCount}{activeCount !== totalCount ? ` / ${totalCount}` : ''}
+          </span>
+        )}
+      </button>
+
+      {expanded && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {loading && variants === null ? (
+            <div style={{ fontSize: 12.5, color: 'var(--s-muted)', padding: '6px 10px' }}>Cargando…</div>
+          ) : (variants ?? []).length === 0 ? (
+            <div style={{
+              fontSize: 12.5, color: 'var(--s-muted)', padding: '8px 12px',
+              background: 'var(--s-surface-2)', borderRadius: 8,
+            }}>
+              Sin variantes. Sin al menos una activa el producto no se puede vender.
+            </div>
+          ) : (
+            (variants ?? []).map((v) => {
+              const isBusy = busyId === v.id;
+              return (
+                <div key={v.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 10px', background: v.is_active ? '#fff' : '#fafaf9',
+                  border: '1px solid var(--s-line-2)', borderRadius: 8,
+                  opacity: isBusy ? 0.6 : 1,
+                }}>
+                  <input
+                    defaultValue={v.name}
+                    onBlur={(e) => {
+                      const nv = e.target.value.trim();
+                      if (nv && nv !== v.name) onPatch(v.id, { name: nv });
+                    }}
+                    style={{
+                      flex: 1, minWidth: 80, padding: '5px 8px',
+                      border: '1px solid var(--s-line)', borderRadius: 6,
+                      background: '#fff', fontSize: 13,
+                    }}
+                  />
+                  <label style={{ fontSize: 11.5, color: 'var(--s-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    +
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      defaultValue={v.extra_price}
+                      onBlur={(e) => {
+                        const nv = Number(e.target.value);
+                        if (Number.isFinite(nv) && nv >= 0 && nv !== Number(v.extra_price)) {
+                          onPatch(v.id, { extra_price: nv });
+                        }
+                      }}
+                      style={{
+                        width: 56, padding: '5px 6px',
+                        border: '1px solid var(--s-line)', borderRadius: 6,
+                        background: '#fff', fontSize: 13, textAlign: 'right',
+                      }}
+                    />
+                    Bs
+                  </label>
+                  <span style={{
+                    fontSize: 11.5, color: (v.stock ?? 0) > 0 ? 'var(--s-ok)' : 'var(--s-muted)',
+                    padding: '3px 8px',
+                    background: (v.stock ?? 0) > 0 ? '#eaf6ed' : 'var(--s-surface-2)',
+                    borderRadius: 999, fontWeight: 600, whiteSpace: 'nowrap',
+                  }}>
+                    stock {v.stock ?? 0}
+                  </span>
+                  <label className="sw" title={v.is_active ? 'Activa' : 'Inactiva'}
+                         style={{ transform: 'scale(.85)' }}>
+                    <input
+                      type="checkbox"
+                      checked={v.is_active}
+                      onChange={(e) => onPatch(v.id, { is_active: e.target.checked })}
+                      disabled={isBusy}
+                    />
+                    <span className="sw-track" />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(v)}
+                    disabled={isBusy}
+                    aria-label="Borrar variante"
+                    style={{
+                      width: 26, height: 26, borderRadius: 6,
+                      border: '1px solid var(--s-line)', background: '#fff',
+                      cursor: 'pointer', color: 'var(--s-muted)',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <X size={14} strokeWidth={2} />
+                  </button>
+                </div>
+              );
+            })
+          )}
+
+          <button
+            type="button"
+            onClick={onAdd}
+            style={{
+              alignSelf: 'flex-start', padding: '6px 12px', fontSize: 12.5,
+              background: 'var(--s-accent-bg)', color: 'var(--s-accent-strong)',
+              border: '1px dashed var(--s-accent-line)', borderRadius: 8,
+              cursor: 'pointer', fontWeight: 600, marginTop: 2,
+            }}
+          >＋ Agregar variante</button>
+        </div>
       )}
     </div>
   );
