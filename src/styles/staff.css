@@ -377,6 +377,14 @@
 .cocina-card-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;}
 .coc-item{display:flex;align-items:flex-start;gap:9px;font-size:15.5px;line-height:1.3;color:var(--s-text);}
 .coc-item .qty{font-family:var(--f-mono);font-weight:600;font-size:16px;color:var(--s-accent);min-width:24px;flex-shrink:0;}
+.coc-flavors{display:block;font-size:13.5px;color:var(--s-muted);margin-top:2px;line-height:1.35;}
+.coc-flavors b{color:var(--s-text);font-weight:600;}
+.coc-split-badge{display:inline-flex;align-items:center;gap:4px;margin-left:8px;
+  padding:1px 8px;border-radius:999px;font-family:var(--f-mono);font-size:11px;
+  font-weight:700;letter-spacing:.04em;color:#7c3a00;background:#fef0d8;border:1px solid #f5c98d;
+  vertical-align:middle;}
+.coc-item--split{padding:8px 10px;border-radius:10px;background:#fffaf0;border:1px solid #f5e6c4;}
+.coc-item--split .qty{color:#a35f00;}
 .btn-listo{margin-top:2px;width:100%;font-weight:600;font-size:15px;letter-spacing:.06em;color:#fff;
   background:var(--s-ok);padding:13px;border-radius:var(--s-rad-sm);transition:transform .14s,filter .15s;}
 .btn-listo:hover{filter:brightness(1.06);}

@@ -9,13 +9,21 @@ import { FlavorSheet } from './FlavorSheet.jsx';
 import { ComboSheet } from './ComboSheet.jsx';
 import { money } from '../../lib/format.js';
 
-// draftKeyOf — clave única para draft cuando hay sabor.
-export const draftKeyOf = (productId, flavorId) => `${productId}__${flavorId ?? 'none'}`;
+// draftKeyOf — clave única del draft. Cuando es mitad-mitad, los dos
+// flavor ids se ordenan alfabéticamente para que "½A/½B" y "½B/½A"
+// colapsen al mismo entry (es conmutativo).
+export const draftKeyOf = (productId, flavorId, flavorId2 = null) => {
+  if (flavorId2) {
+    const [a, b] = [flavorId, flavorId2].sort();
+    return `${productId}__split__${a}__${b}`;
+  }
+  return `${productId}__${flavorId ?? 'none'}`;
+};
 
 export function ProductPicker({
-  productDraft,   // { [productId__flavorId]: { product, flavor, qty, unitPrice } }
-  onAddFlavor,    // (product, flavor|null) => void
-  onDecFlavor,    // (product, flavor|null) => void
+  productDraft,   // { [key]: { product, flavor, flavor2?, qty, unitPrice } }
+  onAddFlavor,    // (product, flavor|null, flavor2?) => void
+  onDecFlavor,    // (product, flavor|null, flavor2?) => void
   onAddCombo,     // ({ combo, items }) => void
 }) {
   const { products, categories, loading: pLoading, error: pError } = useProducts();
@@ -31,20 +39,32 @@ export function ProductPicker({
   if (loading) return <div className="picker picker-skel" aria-hidden="true" />;
   if (pError) return <p className="caja-error">No se pudo cargar la carta: {pError.message}</p>;
 
-  // Qty agregada de un producto (sumando todos sus sabores en el draft).
+  // Qty total de un producto = unidades enteras + splits (cada split cuenta como
+  // 1 unidad, no como dos medias). Recorre el draft para incluir items mitad-mitad.
   const totalQtyOfProduct = (productId) => {
-    const flavors = flavorsByProduct.get(productId) ?? [];
-    if (flavors.length === 0) {
-      return productDraft[draftKeyOf(productId, null)]?.qty ?? 0;
+    let total = 0;
+    for (const entry of Object.values(productDraft)) {
+      if (entry.product?.id === productId) total += entry.qty;
     }
-    return flavors.reduce((s, f) => s + (productDraft[draftKeyOf(productId, f.id)]?.qty ?? 0), 0);
+    return total;
   };
-  // Qty por flavor (para la sheet).
+  // Qty por flavor sin contar splits — la sheet usa este conteo para los chips
+  // "x N" de cada sabor solo. Los splits viven en su propia lista en la sheet.
   const qtyByFlavorForProduct = (productId) => {
     const flavors = flavorsByProduct.get(productId) ?? [];
     const out = {};
     for (const f of flavors) out[f.id] = productDraft[draftKeyOf(productId, f.id)]?.qty ?? 0;
     return out;
+  };
+  // Lista de splits actuales para un producto (los ítems mitad-mitad ya elegidos).
+  const splitsForProduct = (productId) => {
+    const splits = [];
+    for (const [key, entry] of Object.entries(productDraft)) {
+      if (entry.product?.id === productId && entry.flavor2) {
+        splits.push({ key, ...entry });
+      }
+    }
+    return splits;
   };
 
   const onProductClick = (product) => {
@@ -135,8 +155,11 @@ export function ProductPicker({
           product={flavorSheetFor}
           flavors={flavorsByProduct.get(flavorSheetFor.id) ?? []}
           qtyByFlavorId={qtyByFlavorForProduct(flavorSheetFor.id)}
+          splits={splitsForProduct(flavorSheetFor.id)}
           onAdd={(f) => onAddFlavor(flavorSheetFor, f)}
           onDec={(f) => onDecFlavor(flavorSheetFor, f)}
+          onAddSplit={(f1, f2) => onAddFlavor(flavorSheetFor, f1, f2)}
+          onDecSplit={(f1, f2) => onDecFlavor(flavorSheetFor, f1, f2)}
           onClose={() => setFlavorSheetFor(null)}
         />
       )}

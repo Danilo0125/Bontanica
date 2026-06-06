@@ -34,16 +34,19 @@ export async function getOrCreateOpenOrder(tableId, serverId) {
 }
 
 // ─── Enviar a cocina + cobrar (atómico server-side) ──────────────────────────
-// items: [{ product, flavor, qty, unitPrice }] — flavor opcional.
+// items: [{ product, flavor, flavor2?, qty, unitPrice }] — flavor y flavor2 opcionales.
+// Cuando hay flavor2, el item es mitad-mitad (1 unidad, 2 sabores).
 // Una sola transacción en la RPC create_batch: si algo falla, rollback total.
 export async function sendBatchPaid({ orderId, items, serverId, payment }) {
   if (!items?.length) throw new Error('No hay items para enviar');
 
-  const rpcItems = items.map(({ product, flavor, qty, unitPrice }) => ({
+  const rpcItems = items.map(({ product, flavor, flavor2, qty, unitPrice }) => ({
     product_id: product.id,
     flavor_id: flavor?.id ?? null,
+    flavor_id_2: flavor2?.id ?? null,
     product_name_snapshot: product.name,
     flavor_name_snapshot: flavor?.name ?? null,
+    flavor_name_snapshot_2: flavor2?.name ?? null,
     unit_price_snapshot: Number(unitPrice ?? product.price),
     qty: Number(qty),
   }));
@@ -63,7 +66,9 @@ export async function sendBatchPaid({ orderId, items, serverId, payment }) {
     payload: {
       order_id: orderId, total: data.total,
       payment_method: payment.method, item_count: items.length,
-      items: rpcItems.map((it) => ({ id: it.product_id, flavor_id: it.flavor_id, qty: it.qty })),
+      items: rpcItems.map((it) => ({
+        id: it.product_id, flavor_id: it.flavor_id, flavor_id_2: it.flavor_id_2, qty: it.qty,
+      })),
     },
   });
   return { batch, items: rpcItems };

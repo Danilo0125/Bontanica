@@ -5,7 +5,7 @@ import { useOpenOrders } from '../../lib/useOrders.js';
 import { useTables } from '../../lib/useTables.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { markBatchReady, bumpBatchNotification } from '../../lib/orderApi.js';
-import { formatTime, minutesSince } from '../../lib/format.js';
+import { formatTime, minutesSince, formatItemName, isSplitItem } from '../../lib/format.js';
 import { isAudioOn, setAudioOn, ensureAudioCtx, playBeep } from '../../lib/audio.js';
 import { useToast } from './Toasts.jsx';
 import { Bell, BellOff, Leaf, Check, Eye } from '../../lib/icons.jsx';
@@ -196,12 +196,27 @@ export function CocinaView() {
                   </div>
                 )}
                 <ul className="cocina-card-items">
-                  {b.items.map((it) => (
-                    <li key={it.id} className="coc-item">
-                      <span className="qty">{it.qty}×</span>
-                      <span>{it.product_name_snapshot}</span>
-                    </li>
-                  ))}
+                  {b.items.map((it) => {
+                    const split = isSplitItem(it);
+                    return (
+                      <li key={it.id} className={`coc-item${split ? ' coc-item--split' : ''}`}>
+                        <span className="qty">{it.qty}×</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <strong>{it.product_name_snapshot}</strong>
+                          {split && (
+                            <span className="coc-split-badge" aria-label="Mitad-mitad">½ + ½</span>
+                          )}
+                          {(it.flavor_name_snapshot || it.flavor_name_snapshot_2) && (
+                            <span className="coc-flavors">
+                              {split
+                                ? <>½ <b>{it.flavor_name_snapshot}</b> / ½ <b>{it.flavor_name_snapshot_2}</b></>
+                                : <b>{it.flavor_name_snapshot}</b>}
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
                 {!isReadOnly && isReady && (
                   <button
@@ -246,7 +261,7 @@ export function CocinaView() {
             </p>
             <ul className="confirm-items">
               {confirmBatch.items.map((it) => (
-                <li key={it.id}><span className="qty">{it.qty}×</span>{it.product_name_snapshot}</li>
+                <li key={it.id}><span className="qty">{it.qty}×</span>{formatItemName(it)}</li>
               ))}
             </ul>
             <div className="confirm-actions">

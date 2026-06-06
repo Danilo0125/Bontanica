@@ -9,7 +9,7 @@ import {
   cancelBatch, cancelOrder, closeOrder,
 } from '../../lib/orderApi.js';
 import { useAuth } from '../../lib/auth.jsx';
-import { money, formatTime, minutesSince } from '../../lib/format.js';
+import { money, formatTime, minutesSince, formatItemName } from '../../lib/format.js';
 import { ProductPicker, draftKeyOf } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
 import { useToast } from './Toasts.jsx';
@@ -125,6 +125,7 @@ export function MeseroTableDetail() {
       items.push({
         product: entry.product,
         flavor: entry.flavor,
+        flavor2: entry.flavor2 ?? null,
         qty: entry.qty,
         unitPrice: entry.unitPrice ?? Number(entry.product.price),
       });
@@ -144,19 +145,24 @@ export function MeseroTableDetail() {
     [draftItems]
   );
 
-  const addFlavorToDraft = useCallback((product, flavor) => {
-    const key = draftKeyOf(product.id, flavor?.id ?? null);
+  const addFlavorToDraft = useCallback((product, flavor, flavor2 = null) => {
+    const key = draftKeyOf(product.id, flavor?.id ?? null, flavor2?.id ?? null);
     setDraft((d) => {
       const cur = d.products[key]?.qty ?? 0;
       const unitPrice = Number(product.price);
+      // Cuando es split, normalizamos qué sabor queda como "flavor" y cuál como
+      // "flavor2" usando el orden alfabético del id — así la representación es
+      // estable independientemente del orden de selección en la UI.
+      let f1 = flavor, f2 = flavor2;
+      if (flavor2 && flavor2.id < flavor.id) { f1 = flavor2; f2 = flavor; }
       return {
         ...d,
-        products: { ...d.products, [key]: { product, flavor, qty: cur + 1, unitPrice } },
+        products: { ...d.products, [key]: { product, flavor: f1, flavor2: f2, qty: cur + 1, unitPrice } },
       };
     });
   }, []);
-  const decFlavorFromDraft = useCallback((product, flavor) => {
-    const key = draftKeyOf(product.id, flavor?.id ?? null);
+  const decFlavorFromDraft = useCallback((product, flavor, flavor2 = null) => {
+    const key = draftKeyOf(product.id, flavor?.id ?? null, flavor2?.id ?? null);
     setDraft((d) => {
       const cur = d.products[key]?.qty ?? 0;
       if (cur <= 1) {
@@ -325,7 +331,7 @@ export function MeseroTableDetail() {
                   {b.items.filter((it) => it.status !== 'cancelled').map((it) => (
                     <li key={it.id} className="batch-item">
                       <span>
-                        <span className="batch-item-qty">{it.qty}×</span>{it.product_name_snapshot}
+                        <span className="batch-item-qty">{it.qty}×</span>{formatItemName(it)}
                       </span>
                       <span className="batch-item-price">{money(it.unit_price_snapshot * it.qty)} Bs</span>
                     </li>
