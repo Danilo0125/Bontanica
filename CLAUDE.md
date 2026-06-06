@@ -60,7 +60,7 @@ En Vercel: agregar las dos vars en Environment Variables del proyecto.
             ├── CajaGate.jsx         # password + selector Ochito/Nath
             ├── ProtectedRoute.jsx
             ├── CajaLayout.jsx       # header común + switch mesero/cocina
-            ├── MeseroView.jsx       # grilla 25 mesas con totales en vivo
+            ├── MeseroView.jsx       # grilla 18 mesas con totales en vivo
             ├── MeseroTableDetail.jsx# detalle de mesa: batches + draft + cobrar
             ├── ProductPicker.jsx
             ├── PaymentSheet.jsx     # cobro efectivo / QR
@@ -72,7 +72,7 @@ En Vercel: agregar las dos vars en Environment Variables del proyecto.
 5 tablas. Toda la verdad fluye de aquí:
 
 - `products` — la carta. PK `text` (slugs: `mojito-vaso`, etc.). Editable solo desde dashboard.
-- `tables_pos` — 25 mesas (id 1..25). Activación/desactivación desde dashboard.
+- `tables_pos` — 18 mesas (id 1..18). Activación/desactivación desde dashboard.
 - `servers` — Ochito y Nath (id `text`).
 - `orders` — una orden viva por mesa con `status='open'`. Unique partial index sobre `(table_id) WHERE status='open'` garantiza máximo una cuenta abierta por mesa.
 - `order_items` — cada producto agregado es una fila. Items enviados en un mismo "Enviar a cocina" comparten `batch_id`. Cocina marca por batch (`UPDATE ... WHERE batch_id=X SET status='ready'`).

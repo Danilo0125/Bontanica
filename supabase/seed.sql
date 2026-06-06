@@ -197,9 +197,9 @@ insert into public.servers (id, display_name) values
   ('nath','Nath')
 on conflict (id) do update set display_name = excluded.display_name;
 
--- Mesas (25)
+-- Mesas (18)
 insert into public.tables_pos (id, name)
-select i, 'Mesa ' || i from generate_series(1, 25) as i
+select i, 'Mesa ' || i from generate_series(1, 18) as i
 on conflict (id) do nothing;
 
 -- Productos (los actuales del data.js)

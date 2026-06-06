@@ -2,7 +2,7 @@
 // Emite onConfirm con { method, received_amount } y deja al caller la persistencia.
 import { useEffect, useState } from 'react';
 import { money } from '../../lib/format.js';
-import { Banknote, Smartphone, AlertTriangle } from '../../lib/icons.jsx';
+import { Banknote, Smartphone, AlertTriangle, Leaf } from '../../lib/icons.jsx';
 
 const QR_PATH = '/assets/qr-pago.png';
 function useQrAvailability() {
@@ -79,14 +79,25 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
         )}
         {step === 'qr' && (
           <>
-            <h3 className="s-title">QR / Transferencia</h3>
-            <p className="s-sheet-sub">Total: <strong>{money(total)} Bs</strong>{contextLabel && ` · ${contextLabel}`}</p>
+            <h3 className="s-title">Pago con QR</h3>
+            {contextLabel && <p className="s-sheet-sub">{contextLabel}</p>}
             <div className="qr-box">
+              <div className="qr-amount">
+                <strong>{money(total)}</strong><span>Bs</span>
+              </div>
               {qrAvailable === null && <p style={{ fontSize: 12.5 }}>Cargando QR…</p>}
               {qrAvailable === true && (
                 <>
-                  <img className="qr-img" src={QR_PATH} alt="QR de pago de Botánica" />
-                  <p>Escaneá con tu app del banco y confirmá manualmente abajo.</p>
+                  <div className="qr-card">
+                    <div className="qr-card-head">
+                      <Leaf size={14} strokeWidth={1.8} aria-hidden="true" /> Botánica
+                    </div>
+                    <img className="qr-img" src={QR_PATH} alt="QR de pago de Botánica" />
+                  </div>
+                  <p className="qr-tip">
+                    El cliente escanea con <b>Yape</b> u otra app y muestra el comprobante.
+                    Verificá el monto antes de confirmar.
+                  </p>
                 </>
               )}
               {qrAvailable === false && (
@@ -110,7 +121,7 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
                 ? 'Cobrando…'
                 : qrAvailable === false
                   ? 'Configurá el QR primero'
-                  : 'Marcar pagado y enviar a cocina'}
+                  : 'Confirmar pago recibido'}
             </button>
           </>
         )}
