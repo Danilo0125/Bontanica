@@ -26,6 +26,7 @@ const TablesAdmin         = lazy(() => import('./components/caja/admin/Tables.js
 const StaffUsers          = lazy(() => import('./components/caja/admin/StaffUsers.jsx').then(m => ({ default: m.StaffUsers })));
 const Analytics           = lazy(() => import('./components/caja/admin/Analytics.jsx').then(m => ({ default: m.Analytics })));
 const Activity            = lazy(() => import('./components/caja/admin/Activity.jsx').then(m => ({ default: m.Activity })));
+const Stock               = lazy(() => import('./components/caja/admin/Stock.jsx').then(m => ({ default: m.Stock })));
 
 function Loading() {
   return <div style={{ padding: 40, textAlign: 'center', color: '#8b8b82', fontSize: 14 }}>Cargando…</div>;
@@ -69,6 +70,7 @@ export function App() {
               <Route path="usuarios" element={<StaffUsers />} />
               <Route path="analiticas" element={<Analytics />} />
               <Route path="actividad" element={<Activity />} />
+              <Route path="stock" element={<Stock />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

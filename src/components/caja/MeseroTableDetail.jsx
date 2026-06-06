@@ -10,23 +10,28 @@ import {
 } from '../../lib/orderApi.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { money, formatTime, minutesSince } from '../../lib/format.js';
-import { ProductPicker } from './ProductPicker.jsx';
+import { ProductPicker, draftKeyOf } from './ProductPicker.jsx';
 import { PaymentSheet } from './PaymentSheet.jsx';
 import { useToast } from './Toasts.jsx';
 import { useDialog } from './Dialog.jsx';
 import { markBatchNotificationsRead } from '../../lib/notificationsApi.js';
 import { ChevronLeft, X, Eye, UtensilsCrossed, Check } from '../../lib/icons.jsx';
 
-const draftKey = (tableId) => `botanica_draft_mesa_${tableId}`;
+// v2 del draft (con variantes + combos). El prefijo v2 invalida los drafts
+// viejos guardados en localStorage de la versión sin variantes.
+const draftKey = (tableId) => `botanica_draft_v2_mesa_${tableId}`;
 function loadDraft(tableId) {
   try {
     const raw = localStorage.getItem(draftKey(tableId));
-    return raw ? JSON.parse(raw) || {} : {};
-  } catch { return {}; }
+    if (!raw) return { products: {}, combos: [] };
+    const parsed = JSON.parse(raw) || {};
+    return { products: parsed.products ?? {}, combos: parsed.combos ?? [] };
+  } catch { return { products: {}, combos: [] }; }
 }
 function saveDraft(tableId, draft) {
   try {
-    if (!draft || Object.keys(draft).length === 0) localStorage.removeItem(draftKey(tableId));
+    const empty = !draft || (Object.keys(draft.products ?? {}).length === 0 && (draft.combos ?? []).length === 0);
+    if (empty) localStorage.removeItem(draftKey(tableId));
     else localStorage.setItem(draftKey(tableId), JSON.stringify(draft));
   } catch {}
 }
@@ -64,7 +69,10 @@ export function MeseroTableDetail() {
 
   const [orderId, setOrderId] = useState(order?.id ?? null);
   const [opening, setOpening] = useState(false);
+  // Draft v2: productos (keyed por product+variant) + combos (lista de bundles).
   const [draft, setDraft] = useState(() => loadDraft(tableId));
+  const productDraft = draft.products;
+  const comboDraft = draft.combos;
   const [paySheetOpen, setPaySheetOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -110,19 +118,66 @@ export function MeseroTableDetail() {
   // El aviso global de "tanda lista" vive en CajaLayout — funciona desde
   // cualquier ruta del staff. Acá solo mostramos el estado visual del batch.
 
-  const draftItems = Object.values(draft);
-  const draftTotal = draftItems.reduce((s, { product, qty }) => s + Number(product.price) * qty, 0);
-  const draftCount = draftItems.reduce((s, it) => s + it.qty, 0);
+  // Items "planos" para enviar a sendBatchPaid: productos directos + items de combos.
+  const draftItems = useMemo(() => {
+    const items = [];
+    for (const entry of Object.values(productDraft)) {
+      items.push({
+        product: entry.product,
+        variant: entry.variant,
+        qty: entry.qty,
+        unitPrice: entry.unitPrice ?? Number(entry.product.price) + Number(entry.variant?.extra_price ?? 0),
+      });
+    }
+    for (const c of comboDraft) {
+      for (const it of c.items) items.push(it);
+    }
+    return items;
+  }, [productDraft, comboDraft]);
 
-  const addToDraft = useCallback((product) => {
-    setDraft((d) => ({ ...d, [product.id]: { product, qty: (d[product.id]?.qty ?? 0) + 1 } }));
-  }, []);
-  const decFromDraft = useCallback((product) => {
+  const draftTotal = useMemo(
+    () => draftItems.reduce((s, it) => s + Number(it.unitPrice) * it.qty, 0),
+    [draftItems]
+  );
+  const draftCount = useMemo(
+    () => draftItems.reduce((s, it) => s + it.qty, 0),
+    [draftItems]
+  );
+
+  const addVariantToDraft = useCallback((product, variant) => {
+    if (!variant) return;
+    const key = draftKeyOf(product.id, variant.id);
     setDraft((d) => {
-      const cur = d[product.id]?.qty ?? 0;
-      if (cur <= 1) { const n = { ...d }; delete n[product.id]; return n; }
-      return { ...d, [product.id]: { product, qty: cur - 1 } };
+      const cur = d.products[key]?.qty ?? 0;
+      const unitPrice = Number(product.price) + Number(variant.extra_price ?? 0);
+      return {
+        ...d,
+        products: { ...d.products, [key]: { product, variant, qty: cur + 1, unitPrice } },
+      };
     });
+  }, []);
+  const decVariantFromDraft = useCallback((product, variant) => {
+    const key = draftKeyOf(product.id, variant.id);
+    setDraft((d) => {
+      const cur = d.products[key]?.qty ?? 0;
+      if (cur <= 1) {
+        const next = { ...d.products }; delete next[key];
+        return { ...d, products: next };
+      }
+      return {
+        ...d,
+        products: { ...d.products, [key]: { ...d.products[key], qty: cur - 1 } },
+      };
+    });
+  }, []);
+  const addComboToDraft = useCallback(({ combo, items }) => {
+    setDraft((d) => ({
+      ...d,
+      combos: [...d.combos, { combo, items, addedAt: Date.now() }],
+    }));
+  }, []);
+  const removeComboFromDraft = useCallback((addedAt) => {
+    setDraft((d) => ({ ...d, combos: d.combos.filter((c) => c.addedAt !== addedAt) }));
   }, []);
 
   const onConfirmPayment = async ({ method, received_amount }) => {
@@ -141,12 +196,15 @@ export function MeseroTableDetail() {
       setError(null);
       await sendBatchPaid({
         orderId,
-        items: draftItems,
+        items: draftItems.map(({ product, variant, qty, unitPrice }) => ({
+          product: { ...product, price: unitPrice }, // unitPrice incluye extra_price y/o split de combo
+          variant, qty,
+        })),
         serverId: username,
         payment: { method, received_amount },
       });
-      setDraft({});
-      saveDraft(tableId, {});
+      setDraft({ products: {}, combos: [] });
+      saveDraft(tableId, { products: {}, combos: [] });
       setPaySheetOpen(false);
       toast.success(`Tanda enviada a cocina · ${money(draftTotal)} Bs cobrados`);
       refresh();
@@ -204,7 +262,8 @@ export function MeseroTableDetail() {
     if (!orderId) return;
     try {
       await cancelOrder(orderId);
-      saveDraft(tableId, {});
+      saveDraft(tableId, { products: {}, combos: [] });
+      setDraft({ products: {}, combos: [] });
       toast.info(`${table?.name ?? `Mesa ${tableId}`} cancelada`);
       navigate('/caja/mesero', { replace: true });
     } catch (e) { toast.error(`Error: ${e.message ?? e}`); setConfirmCancel(false); }
@@ -300,10 +359,48 @@ export function MeseroTableDetail() {
         <section>
           <h2 className="s-h2">Agregar a la cuenta</h2>
           <ProductPicker
-            draft={Object.fromEntries(draftItems.map(({ product, qty }) => [product.id, qty]))}
-            onAdd={addToDraft}
-            onDec={decFromDraft}
+            productDraft={productDraft}
+            onAddVariant={addVariantToDraft}
+            onDecVariant={decVariantFromDraft}
+            onAddCombo={addComboToDraft}
           />
+          {comboDraft.length > 0 && (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {comboDraft.map((c) => (
+                <div key={c.addedAt} style={{
+                  background: 'var(--s-accent-bg)', border: '1px solid var(--s-accent-line)',
+                  borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ fontSize: 13.5, color: 'var(--s-accent-strong)' }}>
+                      {c.combo.name}
+                    </strong>
+                    <div style={{ fontSize: 12, color: 'var(--s-muted)', marginTop: 2 }}>
+                      {c.items.map((it, i) => (
+                        <span key={i}>
+                          {i > 0 && ' · '}
+                          {it.variant?.name ?? it.product.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <strong style={{ fontSize: 14, color: 'var(--s-accent)' }}>
+                    {money(Number(c.combo.price))} Bs
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={() => removeComboFromDraft(c.addedAt)}
+                    aria-label="Quitar combo"
+                    style={{
+                      width: 28, height: 28, borderRadius: 999, border: '1px solid var(--s-line)',
+                      background: '#fff', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+                      color: 'var(--s-muted)',
+                    }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 

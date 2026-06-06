@@ -33,50 +33,50 @@ export async function getOrCreateOpenOrder(tableId, serverId) {
   return inserted.data;
 }
 
-// ─── Enviar a cocina + cobrar (atómico desde el cliente) ─────────────────────
-// payment: { method: 'efectivo'|'qr', received_amount: number|null }
+// ─── Enviar a cocina + cobrar (atómico server-side con stock) ────────────────
+// items: [{ product, variant, qty }] — variant tiene { id, name, extra_price }.
+// El total y el stock se manejan en la RPC create_batch_with_stock (transacción
+// completa: si falla stock, rolea el batch y los items).
 export async function sendBatchPaid({ orderId, items, serverId, payment }) {
   if (!items?.length) throw new Error('No hay items para enviar');
-  const total = items.reduce((s, { product, qty }) => s + Number(product.price) * qty, 0);
 
-  // 1) Crear el batch (status='paid' por defecto)
-  const batchIns = await supabase.from('order_batches').insert({
-    order_id: orderId,
-    server_id: serverId,
-    total,
-    payment_method: payment.method,
-    received_amount: payment.method === 'efectivo' ? Number(payment.received_amount ?? total) : total,
-    status: 'paid',
-  }).select('*').single();
-  if (batchIns.error) throw batchIns.error;
-  const batch = batchIns.data;
+  const rpcItems = items.map(({ product, variant, qty }) => {
+    const unitPrice = Number(product.price) + Number(variant?.extra_price ?? 0);
+    return {
+      product_id: product.id,
+      variant_id: variant?.id ?? null,
+      product_name_snapshot: product.name,
+      variant_name_snapshot: variant?.name ?? null,
+      unit_price_snapshot: unitPrice,
+      qty: Number(qty),
+    };
+  });
 
-  // 2) Insertar los items con batch_id = id del batch nuevo
-  const rows = items.map(({ product, qty }) => ({
-    order_id: orderId,
-    product_id: product.id,
-    product_name_snapshot: product.name,
-    unit_price_snapshot: product.price,
-    qty,
-    status: 'pending',
-    server_id: serverId,
-    batch_id: batch.id,
-  }));
-  const itemsIns = await supabase.from('order_items').insert(rows).select('*');
-  if (itemsIns.error) {
-    // rollback manual: cancelar el batch creado para no dejar residuo cobrado
-    await supabase.from('order_batches').update({ status: 'cancelled' }).eq('id', batch.id);
-    throw itemsIns.error;
+  const { data, error } = await supabase.rpc('create_batch_with_stock', {
+    p_order_id: orderId,
+    p_items: rpcItems,
+    p_payment_method: payment.method,
+    p_received_amount: payment.method === 'efectivo' ? Number(payment.received_amount ?? null) : null,
+    p_server_id: serverId,
+  });
+  if (error) {
+    // El SQLSTATE 23514 lo usamos para "sin stock". Mostramos amigable.
+    if (error.code === '23514' || /sin stock/i.test(error.message)) {
+      throw new Error('No hay stock suficiente para algún producto de esta tanda. Ajustá la cantidad o el sabor.');
+    }
+    throw error;
   }
+
+  const batch = { id: data.batch_id, total: data.total, order_id: orderId, server_id: serverId };
   logAction('batch_paid', {
     kind: 'order_batch', id: batch.id,
     payload: {
-      order_id: orderId, table_id: null, total,
+      order_id: orderId, total: data.total,
       payment_method: payment.method, item_count: items.length,
-      items: items.map(({ product, qty }) => ({ id: product.id, qty })),
+      items: rpcItems.map((it) => ({ id: it.product_id, variant_id: it.variant_id, qty: it.qty })),
     },
   });
-  return { batch, items: itemsIns.data };
+  return { batch, items: rpcItems };
 }
 
 // ─── Marcar batch como listo (cocina) ────────────────────────────────────────
