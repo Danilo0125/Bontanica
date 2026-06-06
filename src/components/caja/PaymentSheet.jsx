@@ -90,7 +90,7 @@ export function PaymentSheet({ total, onClose, onConfirm, submitting = false, co
                 <>
                   <div className="qr-card">
                     <div className="qr-card-head">
-                      <Leaf size={14} strokeWidth={1.8} aria-hidden="true" /> Botánica · Pagá con Yape
+                      <Leaf size={14} strokeWidth={1.8} aria-hidden="true" /> Botánica
                     </div>
                     <img className="qr-img" src={QR_PATH} alt="QR de pago de Botánica" />
                     <div className="qr-card-foot">
