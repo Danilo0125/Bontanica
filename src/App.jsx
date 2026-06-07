@@ -27,6 +27,7 @@ const StaffUsers          = lazy(() => import('./components/caja/admin/StaffUser
 const Analytics           = lazy(() => import('./components/caja/admin/Analytics.jsx').then(m => ({ default: m.Analytics })));
 const Activity            = lazy(() => import('./components/caja/admin/Activity.jsx').then(m => ({ default: m.Activity })));
 const Flavors             = lazy(() => import('./components/caja/admin/Flavors.jsx').then(m => ({ default: m.Flavors })));
+const Cierre              = lazy(() => import('./components/caja/admin/Cierre.jsx').then(m => ({ default: m.Cierre })));
 
 function Loading() {
   return <div style={{ padding: 40, textAlign: 'center', color: '#8b8b82', fontSize: 14 }}>Cargando…</div>;
@@ -71,6 +72,7 @@ export function App() {
               <Route path="analiticas" element={<Analytics />} />
               <Route path="actividad" element={<Activity />} />
               <Route path="sabores" element={<Flavors />} />
+              <Route path="cierre" element={<Cierre />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

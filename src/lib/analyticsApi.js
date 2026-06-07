@@ -38,6 +38,12 @@ export function fetchKitchenTimes(from, to) {
   return callRpc('analytics_kitchen_times', { p_from: isoFrom(from), p_to: isoFrom(to) });
 }
 
+// Timeline detallado: cada batch en el rango con sus items, mesa y mesero.
+// Lo usa la vista /caja/admin/cierre para el cierre del día.
+export function fetchSalesTimeline(from, to) {
+  return callRpc('analytics_sales_timeline', { p_from: isoFrom(from), p_to: isoFrom(to) });
+}
+
 // ─── Helpers de rangos ──────────────────────────────────────────────────────
 export function rangePresets() {
   const now = new Date();
